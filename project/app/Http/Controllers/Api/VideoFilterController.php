@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Utils\ApiController;
 use App\Http\Controllers\Utils\HelperController;
-use App\Models\Color;
 use App\Models\Video\VideoCategory;
 use App\Models\Video\VideoInterest;
 use App\Models\Video\VideoLanguage;
@@ -39,7 +38,6 @@ class VideoFilterController extends ApiController
                 $rootParentId = $rootParentId ? $rootParentId['id'] : $id;
                 $catId = is_string($rootParentId) ? $rootParentId : json_encode($rootParentId);
 
-                $colors = Color::where('status', 1)->orderBy("id", "desc")->get();
                 $interests = VideoInterest::select(['id', 'id_name', 'name'])->whereJsonContains('category_id', $catId)->where('status', 1)->orderBy("id", "desc")->get();
                 $sizes = VideoSize::select(["id", "size_name as name", "width_ration as p_width", "height_ration as p_height", "width as l_width", "height as l_height", "id_name"])->where('status', 1)->get();
                 $styles = VideoStyle::select(['id', 'id_name', 'name'])->where('status', 1)->orderBy("id", "desc")->get();
@@ -64,7 +62,7 @@ class VideoFilterController extends ApiController
                     $catId
                 );
 
-                $response['colors'] = $colors;
+                $response['colors'] = [];
                 $response['interests'] = $interests;
                 $response['languages'] = $languages;
                 $response['religions'] = $religions;

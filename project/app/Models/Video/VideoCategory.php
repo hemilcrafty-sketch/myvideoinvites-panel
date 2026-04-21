@@ -4,38 +4,35 @@ namespace App\Models\Video;
 
 use App\Http\Controllers\Utils\HelperController;
 use App\Http\Controllers\Utils\QueryManager;
+use App\Traits\HasFullSlug;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Cache;
-use Closure;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Closure;
 
 /**
  * App\Models\Video\VideoCategory
  *
  * @property int $id
- * @property string $string_id
  * @property int|null $parent_category_id
- * @property string|null $child_cat_ids
+ * @property mixed|null $child_cat_ids
  * @property int $total_templates
  * @property int $emp_id
- * @property string $category_name
- * @property string|null $fldr_str
- * @property string|null $cat_link
- * @property string $slug
- * @property string|null $canonical_link
- * @property string|null $full_slug
  * @property int|null $seo_emp_id
+ * @property string|null $string_id
+ * @property string $category_name
+ * @property string|null $category_title
+ * @property string|null $slug
+ * @property string|null $canonical_link
  * @property string|null $meta_title
  * @property string|null $primary_keyword
  * @property string|null $h1_tag
  * @property string|null $tag_line
- * @property string|null $category_title
  * @property string|null $meta_desc
  * @property string|null $short_desc
  * @property string|null $h2_tag
@@ -43,7 +40,6 @@ use Illuminate\Support\Carbon;
  * @property string $category_thumb
  * @property string|null $mockup
  * @property string|null $banner
- * @property int|null $app_id
  * @property string|null $contents
  * @property string|null $faqs
  * @property array|null $top_keywords
@@ -51,25 +47,22 @@ use Illuminate\Support\Carbon;
  * @property int $status
  * @property int $imp
  * @property int $no_index
+ * @property string $priority
+ * @property string $frequency
+ * @property string|null $fldr_str
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read array $parent
+ * @property-read string $full_slug
  * @property-read VideoCategory|null $parentCategory
- * @property-read Collection<int, VideoCategory> $subcategories
- * @property-read Collection<int, VideoVirtualCategory> $virtualPages
+ * @property Collection<int, VideoCategory> $subcategories
  * @property-read int|null $subcategories_count
  * @property-read Collection<int, VideoTemplate> $videoTemplates
  * @property-read int|null $video_templates_count
  * @method static Builder|VideoCategory newModelQuery()
  * @method static Builder|VideoCategory newQuery()
  * @method static Builder|VideoCategory query()
- * @method static Builder|VideoCategory find($value)
- * @method static Builder|VideoCategory whereStringId($value)
- * @method static Builder|VideoCategory whereAppId($value)
  * @method static Builder|VideoCategory whereBanner($value)
  * @method static Builder|VideoCategory whereCanonicalLink($value)
- * @method static Builder|VideoCategory whereCatLink($value)
- * @method static Builder|VideoCategory whereSlug($value)
  * @method static Builder|VideoCategory whereCategoryName($value)
  * @method static Builder|VideoCategory whereCategoryThumb($value)
  * @method static Builder|VideoCategory whereCategoryTitle($value)
@@ -79,6 +72,7 @@ use Illuminate\Support\Carbon;
  * @method static Builder|VideoCategory whereEmpId($value)
  * @method static Builder|VideoCategory whereFaqs($value)
  * @method static Builder|VideoCategory whereFldrStr($value)
+ * @method static Builder|VideoCategory whereFrequency($value)
  * @method static Builder|VideoCategory whereH1Tag($value)
  * @method static Builder|VideoCategory whereH2Tag($value)
  * @method static Builder|VideoCategory whereId($value)
@@ -90,10 +84,13 @@ use Illuminate\Support\Carbon;
  * @method static Builder|VideoCategory whereNoIndex($value)
  * @method static Builder|VideoCategory whereParentCategoryId($value)
  * @method static Builder|VideoCategory wherePrimaryKeyword($value)
+ * @method static Builder|VideoCategory wherePriority($value)
  * @method static Builder|VideoCategory whereSeoEmpId($value)
  * @method static Builder|VideoCategory whereSequenceNumber($value)
  * @method static Builder|VideoCategory whereShortDesc($value)
+ * @method static Builder|VideoCategory whereSlug($value)
  * @method static Builder|VideoCategory whereStatus($value)
+ * @method static Builder|VideoCategory whereStringId($value)
  * @method static Builder|VideoCategory whereTagLine($value)
  * @method static Builder|VideoCategory whereTopKeywords($value)
  * @method static Builder|VideoCategory whereTotalTemplates($value)
@@ -106,23 +103,53 @@ class VideoCategory extends Model
     public static array $defaultCategorySelect = ['id', 'parent_category_id', 'string_id', 'category_name', 'category_thumb', 'banner', 'mockup', 'cat_link', 'child_cat_ids', 'imp'];
 
     protected $table = 'main_categories';
-    protected $connection = 'crafty_video_mysql';
-    use HasFactory;
+    use HasFactory, HasFullSlug;
 
-    protected $guarded = [];
+    protected $fillable = [
+        'category_name',
+        'slug',
+        'canonical_link',
+        'seo_emp_id',
+        'meta_title',
+        'primary_keyword',
+        'h1_tag',
+        'tag_line',
+        'meta_desc',
+        'short_desc',
+        'h2_tag',
+        'long_desc',
+        'category_thumb',
+        'mockup',
+        'banner',
+        'contents',
+        'faqs',
+        'top_keywords',
+        'parent_category_id',
+        'sequence_number',
+        'status',
+        'emp_id',
+        'fldr_str',
+        'total_templates'
+    ];
 
     protected $casts = [
         'top_keywords' => 'array',
     ];
 
-    public function videoTemplates(): HasMany
+
+    public function videoTemplates()
     {
         return $this->hasMany(VideoTemplate::class, 'category_id', 'id');
     }
 
-    public function subcategories(): HasMany
+    public function subcategories()
     {
         return $this->hasMany(VideoCategory::class, 'parent_category_id', 'id');
+    }
+
+    public function parentCategory()
+    {
+        return $this->belongsTo(VideoCategory::class, 'parent_category_id', 'id');
     }
 
     public function virtualPages(): HasMany
@@ -130,25 +157,192 @@ class VideoCategory extends Model
         return $this->hasMany(VideoVirtualCategory::class, 'parent_category_id', 'id');
     }
 
-
-    public function parentCategory(): BelongsTo
+    /**
+     * Root main_categories id for size/theme filters (parity with NewCategory::getRootParentId).
+     */
+    public function getRootParentId(): int
     {
-        return $this->belongsTo(VideoCategory::class, 'parent_category_id', 'id');
+        $category = $this;
+        while ($category->parentCategory && (int) $category->parentCategory->parent_category_id !== 0) {
+            $category = $category->parentCategory;
+        }
+
+        return (int) $category->parent_category_id;
     }
 
-    public function getCatLinkAttribute($value): string
+    public static function getAllCategoriesWithSubcategories()
     {
-        return '/templates/' . $value;
+        $categories = VideoCategory::where('parent_category_id', 0)->get();
+        foreach ($categories as $category) {
+            $category->subcategories = $category->getSubcategoriesTree();
+        }
+        return $categories;
     }
 
-    public function getSlugAttribute($value): string
+
+    public static function getCategoriesWithSubcategories($category)
     {
-        return '/' . $value;
+        $categories = VideoCategory::where('id', $category)->get();
+
+        if (empty($categories->toArray())) {
+            $categories = VideoCategory::where('slug', $category)->get();
+        }
+
+        foreach ($categories as $category) {
+            $category->subcategories = $category->getSubcategoriesTree();
+        }
+        return $categories;
     }
 
-    public function getFullSlugAttribute(): string
+    protected function getSubcategoriesTree()
     {
-        return "https://www.myvideoinvites.com$this->slug";
+        $subcategories = $this->subcategories;
+        foreach ($subcategories as $subcategory) {
+            $subcategory->subcategories = $subcategory->getSubcategoriesTree();
+        }
+        return $subcategories;
+    }
+
+    protected static function booted()
+    {
+        static::created(function (VideoCategory $category) {
+            self::generateStringId($category->id, $category->string_id);
+            VideoSlugHistory::updateVideoSlug(id: $category->id, slug: $category->slug, type: "category");
+            self::clearCategoryCache($category);
+        });
+
+        static::updated(function (VideoCategory $category) {
+            self::generateStringId($category->id, $category->string_id);
+            VideoSlugHistory::updateVideoSlug(id: $category->id, slug: $category->slug, type: "category", update: true);
+            $oldValues = $category->getOriginal();
+            $newValues = $category->getAttributes();
+            $oldParentId = $oldValues['parent_category_id'];
+            $newParentId = $newValues['parent_category_id'];
+            self::clearCategoryCache($category);
+
+            // parent_category_id changed - full hierarchy update
+            if ($oldParentId != $newParentId) {
+                if ($oldParentId != 0) {
+                    self::updateHierarchyFromRoot($oldParentId);
+                }
+                if ($newParentId != 0) {
+                    self::updateHierarchyFromRoot($newParentId);
+                } else {
+                    self::updateHierarchyFromRoot($category->id);
+                }
+            } else {
+                self::updateHierarchyFromRoot($newParentId == null || $newParentId == 0 ? $category->id : $newParentId);
+            }
+        });
+    }
+
+    private static function generateStringId($catId, $stringID): void
+    {
+        if ($stringID && $stringID != "")
+            return;
+
+        $generateStringID = HelperController::generateRandomId(modelSource: VideoCategory::class);
+        $category = VideoCategory::whereId($catId)->first();
+        $category->string_id = $generateStringID;
+        $category->saveQuietly();
+    }
+
+    /**
+     * Clear cache for a category (all related tags)
+     */
+    private static function clearCategoryCache($category): void
+    {
+        Cache::tags(["vi_category_$category->id"])->flush();
+        Cache::tags(['vi_category'])->flush();
+    }
+
+    /**
+     * Get direct children of a category
+     */
+    private static function getChildren($categoryId): Collection
+    {
+        return self::where('parent_category_id', $categoryId)->get();
+    }
+
+    /**
+     * Update entire hierarchy from root when parent changes
+     */
+    private static function updateHierarchyFromRoot($categoryId): void
+    {
+        $rootParent = self::findRootParent($categoryId);
+        if (!$rootParent)
+            return;
+
+        self::updateTemplateCountsFromBottom($rootParent);
+        self::clearHierarchyCacheRecursive($rootParent->id);
+    }
+
+    /**
+     * Find the root parent (where parent_category_id = 0)
+     */
+    private static function findRootParent($categoryId): ?VideoCategory
+    {
+        $category = self::find($categoryId);
+
+        while ($category && $category->parent_category_id != 0) {
+            $category = self::find($category->parent_category_id);
+        }
+
+        return $category;
+    }
+
+    /**
+     * Update template counts from bottom to top
+     */
+    private static function updateTemplateCountsFromBottom($category): void
+    {
+        $directChildren = self::getChildren($category->id);
+
+        // First, recursively update all children
+        foreach ($directChildren as $child) {
+            self::updateTemplateCountsFromBottom($child);
+        }
+
+        // Now update this category's total_templates
+        self::updateCategoryTemplateCount($category);
+    }
+
+    /**
+     * Update total_templates for a single category
+     */
+    private static function updateCategoryTemplateCount($category): void
+    {
+        // Get own template count from Design table
+        $ownCount = VideoTemplate::where('category_id', $category->id)
+            ->whereStatus(1)
+            ->count();
+
+        // Get all direct children's template counts
+        $directChildren = self::getChildren($category->id);
+        $childrenCount = $directChildren->sum('total_templates');
+
+        // Update total_templates
+        $totalCount = $ownCount + $childrenCount;
+        if ($category->total_templates !== $totalCount) {
+            $category->updateQuietly(['total_templates' => $totalCount]);
+        }
+    }
+
+    /**
+     * Clear cache for a category and all its descendants recursively
+     */
+    private static function clearHierarchyCacheRecursive($categoryId): void
+    {
+        $category = self::find($categoryId);
+        if (!$category)
+            return;
+
+        self::clearCategoryCache($category);
+
+        // Clear cache for all direct children
+        foreach (self::getChildren($categoryId) as $child) {
+            self::clearHierarchyCacheRecursive($child->id);
+        }
     }
 
     /**
@@ -359,16 +553,6 @@ class VideoCategory extends Model
 
     }
 
-    // Method to get the root parent ID
-    public function getRootParentId()
-    {
-        $category = $this;
-        while ($category->parentCategory && $category->parentCategory->{"parent_category_id"} != 0) {
-            $category = $category->parentCategory;
-        }
-        return $category->{"parent_category_id"};
-    }
-
     private static function resolveSelect(?array $select): ?array
     {
         if ($select === null) return self::$defaultCategorySelect;
@@ -424,64 +608,4 @@ class VideoCategory extends Model
         };
     }
 
-    private static function getChildsBackup(?int $isStatus = null, ?VideoCategory $parentCat = null, ?array $parentIds = null, ?array $select = null): Closure
-    {
-        $childQuery = VideoCategory::query()->when($select, fn($q) => $q->select($select));
-
-        if ($parentCat !== null) {
-            $childQuery->whereParentCategoryId($parentCat->id);
-        } elseif ($parentIds !== null) {
-            $childQuery->whereIn('parent_category_id', $parentIds);
-        }
-
-        if ($isStatus !== null) {
-            $childQuery->whereStatus($isStatus);
-        }
-
-        $allCategories = $childQuery->orderBy('sequence_number', 'ASC')->get();
-        $allById = $allCategories->keyBy('id');
-        $grouped = $allCategories->groupBy('parent_category_id');
-
-        return function ($category, $depth = 0, $parentTrail = []) use (&$buildTree, $grouped, $allById, $parentCat) {
-            $categoryArray = $category;
-
-            $currentTrail = [...$parentTrail, $categoryArray['id_name'] ?? ''];
-
-            // Add depth (optional)
-            $categoryArray['depth'] = $depth;
-
-            // Add parent info
-            if ($parentCat) {
-                $categoryArray['parent'] = [
-                    'id' => $parentCat->id,
-                    'name' => $parentCat->category_name,
-                    'cat_link' => $parentCat->cat_link,
-                ];
-            } else {
-                $categoryArray['parent'] = isset($allById[$category->parent_category_id]) ? [
-                    'id' => $allById[$category->parent_category_id]->id,
-                    'name' => $allById[$category->parent_category_id]->category_name,
-                ] : null;
-            }
-
-            // Recursively build children
-            $children = ($grouped[$category->id] ?? collect())->map(function ($child) use (&$buildTree, $depth, $currentTrail) {
-                return $buildTree($child, $depth + 1, $currentTrail);
-            })->values();
-
-//            $allChildIds = $children->flatMap(function ($child) {
-//                return array_merge(
-//                    [$child['id']],
-//                    $child['child_cat_ids'] ?? []
-//                );
-//            })->unique()->values()->all();
-
-//            $categoryArray['child_cat_ids'] = $allChildIds;
-
-//            $categoryArray['child_cat_ids'] = $categoryArray['child_cat_ids'] ? json_decode($categoryArray['child_cat_ids'], true) : null;
-            $categoryArray['subcategories'] = $children;
-
-            return $categoryArray;
-        };
-    }
 }
