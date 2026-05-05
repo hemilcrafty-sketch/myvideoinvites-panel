@@ -4838,7 +4838,7 @@ li.active .collapse.list-unstyled.show li.select-menu {
 }
 
 #canonical_link:after {
-  content: "Only Admin or Fenil can modify canonical link";
+  content: "Only Admin or SEO Manager can modify canonical link";
   position: absolute;
   bottom: -10px;
 }

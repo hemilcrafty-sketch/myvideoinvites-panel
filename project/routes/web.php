@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\EmployeeController;
 
 
 /*
@@ -57,6 +58,12 @@ Route::group(['middleware' => ['restrict.ip']], function () {
 	Route::get('/', [HomeController::class, 'index']);
 	Route::get('/dashboard/{manager?}', [HomeController::class, 'index'])->name('dashboard');
 
+	// Pending Tasks
+	Route::get('show_pending_item', [\App\Http\Controllers\Admin\PendingTaskController::class, 'show_pending_item'])->name('show_pending_item');
+	Route::get('rejected_task', [\App\Http\Controllers\Admin\PendingTaskController::class, 'rejected_task'])->name('rejected_task');
+	Route::post('approve_pending_task/{id}', [\App\Http\Controllers\Admin\PendingTaskController::class, 'approve'])->name('approve_pending_task');
+	Route::post('reject_pending_task/{id}', [\App\Http\Controllers\Admin\PendingTaskController::class, 'reject'])->name('reject_pending_task');
+
 	// ============================================
 	// VIDEO ROUTES
 	// ============================================
@@ -69,6 +76,13 @@ Route::group(['middleware' => ['restrict.ip']], function () {
 	Route::post('update_v_cat/{id}', [VideoCatController::class, 'update'])->name('v_cat.update');
 	Route::get('delete_v_cat/{id}', [VideoCatController::class, 'destroy'])->name('v_cat.delete');
 	Route::post('v_cat_imp/{id}', [VideoCatController::class, 'imp_update'])->name('v_cat.imp');
+
+	// Employees
+	Route::get('show_employee', [EmployeeController::class, 'show'])->name('show_employee')->middleware(isAdminOrSeoManger::class);
+	Route::post('create_employee', [EmployeeController::class, 'create'])->name('create_employee')->middleware(isAdminOrSeoManger::class);
+	Route::post('update_employee/{id}', [EmployeeController::class, 'update'])->name('employee.update')->middleware(isAdminOrSeoManger::class);
+	Route::post('reset_employee/{id}', [EmployeeController::class, 'resetPassword'])->name('employee.reset')->middleware(isAdminOrSeoManger::class);
+	Route::post('delete_employee/{id}', [EmployeeController::class, 'destroy'])->name('employee.delete')->middleware(isAdminOrSeoManger::class);
 
 	// Video Templates
 	Route::get('show_v_item', [VideoTemplateController::class, 'show'])->name('show_v_item');
@@ -133,11 +147,11 @@ Route::group(['middleware' => ['restrict.ip']], function () {
 	Route::post('check_status', [NoIndexController::class, 'checkStatus'])->name('check_status')->middleware(isAdminOrSeoManger::class);
 	Route::post('check_premium', [NoIndexController::class, 'checkPremium'])->name('check_premium')->middleware(isAdminOrSeoManger::class);
 
-    // Density Checker
-    Route::post('/check-density-by-slug', [DensityCheckerController::class, 'checkFromSlug'])->name('density.check.slug');
-    Route::post('/density-checker/primary-check', [DensityCheckerController::class, 'checkPrimaryKeyword'])->name('density-checker.primary-check');
+	// Density Checker
+	Route::post('/check-density-by-slug', [DensityCheckerController::class, 'checkFromSlug'])->name('density.check.slug');
+	Route::post('/density-checker/primary-check', [DensityCheckerController::class, 'checkPrimaryKeyword'])->name('density-checker.primary-check');
 
-    //Route::get('refreshTanscation', [App\Http\Controllers\Api\PaymentController::class, 'refreshTanscation'])->name('refreshTanscation')->middleware(IsAdmin::class);
+	//Route::get('refreshTanscation', [App\Http\Controllers\Api\PaymentController::class, 'refreshTanscation'])->name('refreshTanscation')->middleware(IsAdmin::class);
 
 	Route::get('/clear-cache', function () {
 		Artisan::call('optimize');

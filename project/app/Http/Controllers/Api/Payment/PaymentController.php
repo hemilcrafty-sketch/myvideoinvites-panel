@@ -496,7 +496,7 @@ class PaymentController extends ApiController
             'gbraid' => $request->cookie('_gbraid'),
             'gcl_au' => $request->cookie('_gcl_au'),
             'ga' => $request->cookie('_ga'),
-            'userAgent' => $request->header('User-Agent', 'Unknown'),
+            'user_agent' => $request->header('User-Agent', 'Unknown'),
             'ip_address' => $ipData['ip'],
         ];
 

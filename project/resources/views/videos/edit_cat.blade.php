@@ -183,8 +183,8 @@
     <div class="video-category-edit-container">
         <div class="min-height-200px">
             <div class="seo-edit-card">
-                <div class="section-header">Edit Video Category</div>
-                <form method="post" id="dynamic_form" enctype="multipart/form-data">
+                <div class="section-header">Edit Video Category {{ request('preview') ? '(Preview Mode)' : '' }}</div>
+                <form method="post" id="dynamic_form" enctype="multipart/form-data" class="{{ request('preview') ? 'preview-mode' : '' }}">
 
                     <span id="result"></span>
                     @csrf
@@ -217,7 +217,7 @@
                                     <input type="text" class="form-control canonical_link"
                                         name="canonical_link" value="{{ $datas['cat']->canonical_link }}" />
                                 </div>
-                                <p class="text-end" style="font-size: 12px;">Only admin or fenil can modify
+                                <p class="text-end" style="font-size: 12px;">Only admin or SEO Manager can modify
                                     canonical link</p>
                             </div>
                         </div>
@@ -238,6 +238,7 @@
                         </div>
                     </div>
                     @include('videos.partials.sitemap_seo_fields', [
+                        'no_index' => $datas['cat']->no_index ?? 1,
                         'priority' => $datas['cat']->priority ?? 0.90,
                         'frequency' => $datas['cat']->frequency ?? 'daily',
                     ])
@@ -248,9 +249,9 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Meta Title</h6>
-                                <input class="form-control" type="text" name="meta_title" maxlength="60"
+                                <input class="form-control" type="text" name="meta_title" id="meta_title" maxlength="60"
                                     value="{{ $datas['cat']->meta_title }}"
-                                    oninput="updateMetaCount(this)" required>
+                                    oninput="updateCount(this, 'metaCounter')" required>
                                 <small id="metaCounter" class="text-muted">0 / 60</small>
                             </div>
                         </div>
@@ -269,20 +270,14 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>H1 Tag</h6>
-                                <input class="form-control" type="text" name="h1_tag" maxlength="60"
+                                <input class="form-control" type="text" name="h1_tag" id="h1_tag" maxlength="60"
                                     value="{{ $datas['cat']->h1_tag }}"
                                     oninput="updateCount(this, 'h1Counter')" required>
                                 <small id="h1Counter" class="text-muted">60 remaining of 60 letters</small>
                             </div>
                         </div>
 
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <h6>Tag Line</h6>
-                                <input class="form-control" type="text" name="tag_line"
-                                    value="{{ $datas['cat']->tag_line }}" required>
-                            </div>
-                        </div>
+
 
                         <div class="col-md-6">
                             <div class="form-group">
@@ -296,7 +291,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Meta Desc</h6>
-                                <textarea style="height: 120px" class="form-control" name="meta_desc" maxlength="160" oninput="updateCount(this, 'metaDescCounter')">{{ $datas['cat']->meta_desc }}</textarea>
+                                <textarea style="height: 120px" class="form-control" name="meta_desc" id="meta_desc" maxlength="160" oninput="updateCount(this, 'metaDescCounter')">{{ $datas['cat']->meta_desc }}</textarea>
                                 <small id="metaDescCounter" class="text-muted"></small>
                             </div>
                         </div>
@@ -304,7 +299,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Short Desc</h6>
-                                <textarea style="height: 120px" class="form-control" name="short_desc" maxlength="350" oninput="updateCount(this, 'shortDescCounter')">{{ $datas['cat']->short_desc }}</textarea>
+                                <textarea style="height: 120px" class="form-control" name="short_desc" id="short_desc" maxlength="350" oninput="updateCount(this, 'shortDescCounter')">{{ $datas['cat']->short_desc }}</textarea>
                                 <small id="shortDescCounter" class="text-muted"></small>
                             </div>
                         </div>
@@ -355,16 +350,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <h6>Banner</h6>
-                        <input type="file"
-                            class="form-control-file form-control height-auto dynamic-file"
-                            data-accept=".jpg, .jpeg, .webp, .svg"
-                            data-imgstore-id="banner"
-                            data-nameset=true
-                            data-required=false
-                            data-value="{{ $datas['cat']->banner ? $contentManager::getStorageLink($datas['cat']->banner) : '' }}">
-                    </div>
+
 
                     <br>
                     <div class="section-header">Category Settings</div>
@@ -457,11 +443,47 @@
                             </select>
                         </div>
                     </div>
-                    <div class="action-buttons">
-                        <input class="btn btn-primary" type="submit" name="submit" value="Update Category">
-                        <a href="{{ route('show_v_cat') }}" class="btn btn-secondary">Cancel</a>
-                    </div>
                 </form>
+                <div class="action-buttons">
+                    @if(!request('preview'))
+                        <input class="btn btn-primary" type="submit" onclick="document.getElementById('dynamic_form').dispatchEvent(new Event('submit'))" value="Update Category">
+                    @else
+                        @if(isset($datas['pendingTask']) && $roleManager::isAdminOrSeoManager(Auth::user()->user_type))
+                            <div class="ml-auto d-flex gap-2">
+                                <button type="button" class="btn btn-success" onclick="approveTask('{{ $datas['pendingTask']->id }}')">
+                                    <i class="fa fa-check"></i> Approve
+                                </button>
+                                <button type="button" class="btn btn-danger" onclick="openRejectModal('{{ $datas['pendingTask']->id }}')">
+                                    <i class="fa fa-times"></i> Reject
+                                </button>
+                            </div>
+                        @endif
+                    @endif
+                    <a href="{{ request('preview') ? route('show_pending_item') : route('show_v_cat') }}" class="btn btn-secondary">{{ request('preview') ? 'Back to Tasks' : 'Cancel' }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reject Reason Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title">Reject Task</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="reject_task_id">
+                <div class="form-group">
+                    <label>Reason for rejection</label>
+                    <textarea id="reject_reason" class="form-control" rows="3" placeholder="Enter reason..." style="min-height: 100px;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="rejectTask()">Submit Rejection</button>
             </div>
         </div>
     </div>
@@ -470,25 +492,25 @@
 <script>
     // Initialize character counters on page load
     $(document).ready(function() {
-        const metaTitleInput = document.querySelector('input[name="meta_title"]');
-        if (metaTitleInput) {
-            updateMetaCount(metaTitleInput);
-        }
+        const initCounters = () => {
+            const fields = [
+                { id: 'meta_title', counter: 'metaCounter' },
+                { id: 'h1_tag', counter: 'h1Counter' },
+                { id: 'meta_desc', counter: 'metaDescCounter' },
+                { id: 'short_desc', counter: 'shortDescCounter' }
+            ];
 
-        const h1TagInput = document.querySelector('input[name="h1_tag"]');
-        if (h1TagInput) {
-            updateCount(h1TagInput, 'h1Counter');
-        }
+            fields.forEach(field => {
+                const el = document.getElementById(field.id);
+                if (el) {
+                    updateCount(el, field.counter);
+                }
+            });
+        };
 
-        const metaDescTextarea = document.querySelector('textarea[name="meta_desc"]');
-        if (metaDescTextarea) {
-            updateCount(metaDescTextarea, 'metaDescCounter');
-        }
-
-        const shortDescTextarea = document.querySelector('textarea[name="short_desc"]');
-        if (shortDescTextarea) {
-            updateCount(shortDescTextarea, 'shortDescCounter');
-        }
+        initCounters();
+        setTimeout(initCounters, 100);
+        setTimeout(initCounters, 500);
     });
 
     $('#dynamic_form').on('submit', function(event) {
@@ -586,6 +608,22 @@
         $("#parentCategoryInput span").html('== none ==');
     });
 
+    $(document).ready(function() {
+        if ("{{ request('preview') }}" == "1") {
+            $('input, textarea, select').prop('disabled', true);
+            $('.dynamic-file').prop('disabled', true);
+            $('#parentCategoryInput').css('pointer-events', 'none').css('background-color', '#f8f9fa');
+            $('.add-content-btn, .remove_block, .add_faq_btn, .remove_faq').hide();
+            $('button:contains("Add Content"), button:contains("Add Faqs")').hide();
+            $('.btn-success:contains("Edit"), .btn-danger:contains("delete")').hide();
+            $('.btn-success:contains("Add tag"), .btn-danger:contains("Remove Content")').hide();
+            $('<style>')
+                .prop('type', 'text/css')
+                .html('.preview-mode { pointer-events: none; } .action-buttons, .action-buttons * { pointer-events: auto; } .preview-mode input:disabled, .preview-mode textarea:disabled, .preview-mode select:disabled { background-color: #f8f9fa !important; color: #6c757d !important; }')
+                .appendTo('head');
+        }
+    });
+
     // Category Name to Slug auto-generation
     $(document).ready(function() {
         const toTitleCase = str => str.replace(/\b\w+/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
@@ -598,18 +636,9 @@
         });
     });
 
-    function updateMetaCount(input) {
-        const max = 60;
-        const remaining = max - input.value.length;
-        document.getElementById('metaCounter').textContent =
-            remaining + ' remaining of ' + max + ' letters';
-    }
-
     function updateCount(input, counterId) {
-        let max = 60; // default
-        if (counterId === 'metaDescCounter') max = 160;
-        if (counterId === 'shortDescCounter') max = 350;
-
+        if (!input || document.querySelector('form.preview-mode')) return;
+        const max = input.getAttribute('maxlength') || 60;
         const remaining = max - input.value.length;
         const counterElement = document.getElementById(counterId);
         if (counterElement) {
@@ -641,6 +670,64 @@
             console.error('dynamicFileCmp function not found!');
         }
     });
+    
+    function approveTask(id) {
+        if (!confirm('Are you sure you want to approve and apply these changes?')) return;
+        
+        $.ajax({
+            url: "{{ url('approve_pending_task') }}/" + id,
+            type: 'POST',
+            data: {
+                _token: "{{ csrf_token() }}",
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert(response.success);
+                    window.location.href = "{{ route('show_pending_item') }}";
+                } else {
+                    alert(response.error);
+                }
+            },
+            error: function(err) {
+                alert('Something went wrong.');
+            }
+        });
+    }
+
+    function openRejectModal(id) {
+        $('#reject_task_id').val(id);
+        $('#rejectModal').modal('show');
+    }
+
+    function rejectTask() {
+        let id = $('#reject_task_id').val();
+        let reason = $('#reject_reason').val();
+        
+        if (!reason) {
+            alert('Please enter a reason.');
+            return;
+        }
+
+        $.ajax({
+            url: "{{ url('reject_pending_task') }}/" + id,
+            type: 'POST',
+            data: {
+                _token: "{{ csrf_token() }}",
+                reason: reason
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert(response.success);
+                    window.location.href = "{{ route('show_pending_item') }}";
+                } else {
+                    alert(response.error);
+                }
+            },
+            error: function(err) {
+                alert('Something went wrong.');
+            }
+        });
+    }
 </script>
 </body>
 

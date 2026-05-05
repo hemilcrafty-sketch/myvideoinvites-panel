@@ -21,6 +21,7 @@ use App\Models\Video\VideoVirtualCategory;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Exception;
+use Cache;
 
 class LottieApiController extends ApiController
 {
@@ -39,7 +40,7 @@ class LottieApiController extends ApiController
 
         if ($this->isFakeRequest($request)) return $this->failed(msg: "Unauthorized");
 
-        $page = (int)$request->has('page') ? $request->get('page') : 1;
+        $page = (int) $request->has('page') ? $request->get('page') : 1;
 
         $limit = 12;
 
@@ -49,11 +50,11 @@ class LottieApiController extends ApiController
             ->whereStatus(1)
             ->where('parent_category_id', '>', 0)
             ->where(function ($q) {
-                $q->whereHas('videoTemplates', fn($t) => $t->whereStatus(1)->whereDoFrontLottie(1)->whereIsDeleted(0));
+                $q->whereHas('videoTemplates', fn($t) => $t->whereStatus(1)->whereTemplateType(0)->whereIsDeleted(0));
             })
             ->with([
-                'videoTemplates' => fn($t) => $t->whereStatus(1)->whereDoFrontLottie(1)->whereIsDeleted(0)->with(['videoCat', 'virtualCat']),
-            ])->orderBy('id')
+                'videoTemplates' => fn($t) => $t->whereStatus(1)->whereTemplateType(0)->whereIsDeleted(0)->with(['videoCat', 'virtualCat'])->orderBy('id', 'desc'),
+            ])->orderBy('sequence_number', 'asc')
             ->paginate($limit, ['*'], 'page', $page);
 
         $datas->getCollection()->transform(function ($category) {
@@ -68,7 +69,7 @@ class LottieApiController extends ApiController
             $category->templates = $parentTemplates
                 ->merge($subTemplates)
                 ->unique('id')
-                ->sortBy('id')
+                ->sortByDesc('id')
                 ->take(12)
                 ->values();
 
@@ -110,7 +111,7 @@ class LottieApiController extends ApiController
             "seo" => self::$templateSeo,
         ];
 
-        $data = PReviewController::getPReviews("", 6, "15vODGdC", 1);
+        $data = PReviewController::getPReviews("", 1, "15vODGdC", 1);
         if ($data['success']) {
             $response['reviews'] = $data['data'];
         }
@@ -151,10 +152,12 @@ class LottieApiController extends ApiController
     function getPage(Request $request): array|string
     {
 
-        if ($this->isFakeRequest($request)) return $this->failed(msg: "Unauthorized");
+        if ($this->isFakeRequest($request))
+            return $this->failed(msg: "Unauthorized");
 
         $oldSlug = $request->input('slug');
-        if (empty($oldSlug)) return $this->failed(msg: "Parameters missing!");
+        if (empty($oldSlug))
+            return $this->failed(msg: "Parameters missing!");
 
         $hasPageInRequest = $request->has('page');
         $data = HelperController::extractAndRemoveTrailingNumber($oldSlug);
@@ -162,7 +165,8 @@ class LottieApiController extends ApiController
         $slug = $data['string'] ?? 1;
 
         $slugData = VideoSlugHistory::whereSlug($slug)->first();
-        if (empty($slugData)) return $this->failed(msg: "Invalid data");
+        if (empty($slugData))
+            return $this->failed(msg: "Invalid data");
 
         if ($slugData->reference_type === 'category') {
             return $this->getCategory($request, $slug, $page);
@@ -178,8 +182,9 @@ class LottieApiController extends ApiController
     function getCategory(Request $request, $slug, $page): array|string
     {
 
-        $category = VideoCategory::whereSlug($slug)->first();
-        if (empty($category)) return $this->failed(msg: "Invalid data");
+        $category = VideoCategory::where('parent_category_id', '!=', 0)->whereSlug($slug)->first();
+        if (empty($category))
+            return $this->failed(msg: "Invalid data");
 
         $filter = isset($request->filter) ? $request->filter : [];
 
@@ -188,9 +193,10 @@ class LottieApiController extends ApiController
         $contentCacheKey = 'vi_category_content_' . $slug;
         $faqCacheKey = 'vi_category_faq_' . $slug;
 
-        $templatesQuery = VideoTemplate::with(['videoCat', 'virtualCat'])->whereCategoryId($category->id)->whereDoFrontLottie(1)->whereIsDeleted(0)->whereStatus(1);
+        $templatesQuery = VideoTemplate::with(['videoCat', 'virtualCat'])->whereCategoryId($category->id)->whereTemplateType(0)->whereIsDeleted(0)->whereStatus(1);
 
-        if (!empty($filter)) $templatesQuery = self::getFilterQuery($templatesQuery, $filter);
+        if (!empty($filter))
+            $templatesQuery = self::getFilterQuery($templatesQuery, $filter);
 
         $datas = $templatesQuery->paginate($limit, ['*'], 'page', $page);
         $rates = RateController::getRates();
@@ -238,11 +244,12 @@ class LottieApiController extends ApiController
             "title" => $faqsResponse['faqs_title'],
             "data" => $faqsResponse['faqs'],
         ];
-        $response['canonical_link'] = PaginationController::buildCanonicalLink($category->canonical_link, $category->full_slug, $page);
+        $response['canonical_link'] = PaginationController::buildCanonicalLink($category->canonical_link, $category->full_slug, $page, !is_null($this->uid));
         $response['pre_breadcrumb'] = self::getCategoryBreadcrumbs($category);
 
-        $data = PReviewController::getPReviews($this->uid, 6, $category->string_id, 1);
-        if ($data['success']) $response['reviews'] = $data['data'];
+        $data = PReviewController::getPReviews($this->uid, 1, $category->string_id, 1);
+        if ($data['success'])
+            $response['reviews'] = $data['data'];
 
         return $this->successed(datas: $response, noIndex: $category->no_index);
     }
@@ -251,7 +258,8 @@ class LottieApiController extends ApiController
     {
 
         $virtualPage = VideoVirtualCategory::whereSlug($slug)->first();
-        if (empty($virtualPage)) return $this->failed(msg: "Invalid data");
+        if (empty($virtualPage))
+            return $this->failed(msg: "Invalid data");
 
         $filter = isset($request->filter) ? $request->filter : [];
 
@@ -259,9 +267,9 @@ class LottieApiController extends ApiController
         $faqCacheKey = 'vi_vp_category_faq_' . $slug;
 
         $cacheKey = $cacheTag . md5(json_encode([
-                'filter' => json_encode($filter),
-                'page' => $page,
-            ]));
+            'filter' => json_encode($filter),
+            'page' => $page,
+        ]));
 
         $rates = RateController::getRates();
 
@@ -298,35 +306,39 @@ class LottieApiController extends ApiController
             "title" => $faqsResponse['faqs_title'],
             "data" => $faqsResponse['faqs'],
         ];
-        $response['canonical_link'] = PaginationController::buildCanonicalLink($virtualPage->canonical_link, $virtualPage->full_slug, $page);
+        $response['canonical_link'] = PaginationController::buildCanonicalLink($virtualPage->canonical_link, $virtualPage->full_slug, $page, !is_null($this->uid));
         $response['pre_breadcrumb'] = self::getCategoryBreadcrumbs($videoCat, $virtualPage->category_name, $virtualPage->slug);
 
-        $data = PReviewController::getPReviews($this->uid, 7, $virtualPage->string_id, 1);
-        if ($data['success']) $response['reviews'] = $data['data'];
+        $data = PReviewController::getPReviews($this->uid, 2, $virtualPage->string_id, 1);
+        if ($data['success'])
+            $response['reviews'] = $data['data'];
 
         return $this->successed(datas: $response, noIndex: $virtualPage->no_index);
     }
 
     function getTemplate(Request $request, $slug = null): array|string
     {
-        if (empty($slug) && $this->isFakeRequest($request)) return $this->failed(msg: "Unauthorized");
+        if (empty($slug) && $this->isFakeRequest($request))
+            return $this->failed(msg: "Unauthorized");
 
         $slug = $request->input('slug', $slug);
-        if (empty($slug)) return $this->failed(msg: "Parameters missing!");
+        if (empty($slug))
+            return $this->failed(msg: "Parameters missing!");
 
         $itemData = VideoTemplate::with(['videoCat', 'virtualCat'])
             ->where(function ($query) use ($slug) {
                 $query->where('string_id', $slug)
                     ->orWhere('slug', $slug);
             })
-            ->whereDoFrontLottie(1)->whereStatus(1)
+            ->whereTemplateType(0)->whereStatus(1)
             ->whereIsDeleted(0)
             ->first();
-
+        if (empty($itemData))
+            return $this->failed(msg: "Video not found");
         $rates = RateController::getRates(true);
         $data = HelperController::getVideoItemData(item: $itemData, rates: $rates);
         $data = array(
-            ...$data,
+            ...($data ?? []),
             'zip_url' => HelperController::$mediaUrl . $itemData->video_zip_url,
             'editable_image' => json_decode($itemData->editable_image),
             'change_text' => $itemData->change_text,
@@ -345,7 +357,7 @@ class LottieApiController extends ApiController
         try {
             $SearchApi = new VideoSearchApiController($request);
             $searchData = $SearchApi->exactKeywordTemplates($rates, $itemData->keyword, 15, $itemData->string_id);
-        } catch (QueryException|Exception $e) {
+        } catch (QueryException | Exception $e) {
             $searchData['datas'] = [];
         }
 
@@ -355,7 +367,7 @@ class LottieApiController extends ApiController
         $response['suggested'] = $searchData['datas'];
 
         $response['category_hierarchy'] = self::getSubCategories($itemData->videoCat);
-        $response['pre_breadcrumb'] = self::getCategoryBreadcrumbs($itemData->videoCat, $itemData->video_name, $itemData->slug);
+        $response['pre_breadcrumb'] = self::getCategoryBreadcrumbs($itemData->videoCat, $itemData->video_name, $itemData->slug, $itemData->virtualCat);
         $response['cta'] = isset($itemData->cta) ? HelperController::getCTA($itemData->cta) : null;
         $response['seo'] = [
             'h2_tag' => $itemData->h2_tag,
@@ -364,9 +376,9 @@ class LottieApiController extends ApiController
             'meta_description' => $itemData->meta_description
         ];
 
-        $response['canonical_link'] = PaginationController::buildCanonicalLink($itemData->canonical_link, $itemData->full_slug, 1);
+        $response['canonical_link'] = PaginationController::buildCanonicalLink($itemData->canonical_link, $itemData->full_slug, 1, !is_null($this->uid));
 
-        $data = PReviewController::getPReviews($this->uid, 8, $itemData->string_id, 1);
+        $data = PReviewController::getPReviews($this->uid, 3, $itemData->string_id, 1);
         if ($data['success']) {
             $response['reviews'] = $data['data'];
         }
@@ -383,7 +395,8 @@ class LottieApiController extends ApiController
 
     function getPurchases(Request $request): array|string
     {
-        if ($this->isFakeRequestAndUser($request)) return $this->failed(msg: "Unauthorized");
+        if ($this->isFakeRequestAndUser($request))
+            return $this->failed(msg: "Unauthorized");
 
         $page = $request->has('page') ? $request->get('page') : 1;
 
@@ -434,7 +447,7 @@ class LottieApiController extends ApiController
         return $this->successed(msg: $msg, datas: $response);
     }
 
-    public static function getCategoryBreadcrumbs(VideoCategory $cat = null, $last = null, $link = null): array
+    public static function getCategoryBreadcrumbs(VideoCategory $cat = null, $last = null, $link = null, VideoVirtualCategory $v_cat = null): array
     {
 
         $pre_breadcrumb[] = [
@@ -445,14 +458,14 @@ class LottieApiController extends ApiController
         ];
 
         if ($cat) {
-//            if ($cat->parentCategory) {
-//                $pre_breadcrumb[] = [
-//                    'value' => $cat->parentCategory->category_name,
-//                    "link" => $cat->parentCategory->slug,
-//                    "openinnewtab" => 0,
-//                    "nofollow" => 0
-//                ];
-//            }
+            if ($cat->parentCategory) {
+                $pre_breadcrumb[] = [
+                    'value' => $cat->parentCategory->category_name,
+                    "link" => $cat->parentCategory->slug,
+                    "openinnewtab" => 0,
+                    "nofollow" => 0
+                ];
+            }
             $pre_breadcrumb[] = [
                 'value' => $cat->category_name,
                 "link" => $cat->slug,
@@ -461,13 +474,17 @@ class LottieApiController extends ApiController
             ];
         }
 
-        if (is_null($last) && !empty($pre_breadcrumb)) {
-//            $lastIndex = count($pre_breadcrumb) - 1;
-//            unset($pre_breadcrumb[$lastIndex]['link']);
-//            unset($pre_breadcrumb[$lastIndex]['openinnewtab']);
-//            unset($pre_breadcrumb[$lastIndex]['nofollow']);
-        } else {
-            if ($last) $pre_breadcrumb[] = ['value' => $last, "link" => $link];
+        if ($v_cat) {
+            $pre_breadcrumb[] = [
+                'value' => $v_cat->category_name,
+                "link" => $v_cat->slug,
+                "openinnewtab" => 0,
+                "nofollow" => 0
+            ];
+        }
+
+        if ($last) {
+            $pre_breadcrumb[] = ['value' => $last, "link" => $link];
         }
 
         return $pre_breadcrumb;
@@ -475,9 +492,10 @@ class LottieApiController extends ApiController
 
     public static function getSubCategories(VideoCategory|int|null $category, $allTags = false): array
     {
-        if (is_int($category)) $category = VideoCategory::findId(select: null, isStatus: 1, id: $category);
+        if (is_int($category))
+            $category = VideoCategory::findId(select: null, isStatus: 1, id: $category);
 
-        $parents = VideoCategory::query()->select(['id', 'category_name', 'category_thumb', 'slug'])->where('parent_category_id', '!=', 0)->where('total_templates', '>', 0)->whereStatus(1)->get();
+        $parents = VideoCategory::query()->select(['id', 'category_name', 'category_thumb', 'slug', 'sequence_number'])->where('parent_category_id', '!=', 0)->where('total_templates', '>', 0)->whereStatus(1)->orderBy('sequence_number', 'asc')->get();
         $parentTags = [];
         foreach ($parents as $parent) {
             $parentTags[] = [
@@ -491,12 +509,12 @@ class LottieApiController extends ApiController
         }
 
         if ($allTags) {
-            $parentCat = VideoVirtualCategory::all();
+            $parentCat = VideoVirtualCategory::whereStatus(1)->orderBy('sequence_number', 'asc')->get();
             return ["categories" => array_values($parentTags), "tags" => self::getChilds($parentCat)];
         }
 
         if ($category) {
-            $parentCat = VideoVirtualCategory::whereParentCategoryId($category->id)->whereStatus(1)->get();
+            $parentCat = VideoVirtualCategory::whereParentCategoryId($category->id)->whereStatus(1)->orderBy('sequence_number', 'asc')->get();
             return ["categories" => array_values($parentTags), "tags" => self::getChilds($parentCat)];
         }
 
@@ -656,5 +674,75 @@ class LottieApiController extends ApiController
 
         return $templatesQuery;
     }
+    /**
+     * Get category and subcategory hierarchy for header.
+     *
+     * @param Request $request
+     * @return array|string
+     */
+    public function getHeaderHierarchy(Request $request): array|string
+    {
+        if ($this->isFakeRequest($request)) return $this->failed(msg: "Unauthorized");
 
+        // 1. Fetch Subcategories (Main Category children)
+        $categories = VideoCategory::where('parent_category_id', '>', 0)
+            ->whereStatus(1)
+            ->with(['virtualPages' => fn($q) => $q->whereStatus(1)])
+            ->orderBy('id')
+            ->get();
+
+        $nav = [
+            "wedding" => [],
+            "engagement" => [],
+            "birthday" => [],
+            "baby" => [],
+            "more" => [],
+        ];
+
+        $mapper = function ($cat) {
+            $subItems = [];
+            if (isset($cat->virtualPages)) {
+                foreach ($cat->virtualPages as $vPage) {
+                    $subItems[] = [
+                        "title" => $vPage->category_name,
+                        "href" => $vPage->slug
+                    ];
+                }
+            }
+            return [
+                "title" => $cat->category_name,
+                "href" => $cat->slug,
+                "subcategories" => $subItems
+            ];
+        };
+
+        // Group Main Subcategories
+        foreach ($categories as $cat) {
+            $slug = strtolower($cat->slug);
+            $group = "";
+
+            if (str_contains($slug, 'wedding')) $group = 'wedding';
+            else if (str_contains($slug, 'engagement')) $group = 'engagement';
+            else if (str_contains($slug, 'birthday')) $group = 'birthday';
+            else if (str_contains($slug, 'baby') || str_contains($slug, 'baby-shower')) $group = 'baby';
+
+            if ($group !== "") {
+                // Master category logic: Flat list (First category itself, then its virtuals)
+                $nav[$group][] = [
+                    "title" => $cat->category_name,
+                    "href" => $cat->slug
+                ];
+                foreach ($cat->virtualPages as $vPage) {
+                    $nav[$group][] = [
+                        "title" => $vPage->category_name,
+                        "href" => $vPage->slug
+                    ];
+                }
+            } else {
+                $nav['more'][] = $mapper($cat);
+            }
+        }
+
+        return $this->successed(datas: $nav);
+    }
 }

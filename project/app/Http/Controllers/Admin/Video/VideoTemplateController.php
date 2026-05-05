@@ -122,6 +122,7 @@ class VideoTemplateController extends AppBaseController
                 $queryBuilder->where('id', 'like', "%$query%")
                     ->orWhere('relation_id', 'like', "%$query%")
                     ->orWhere('video_name', 'like', "%$query%")
+                    ->orWhere('slug', 'like', "%$query%")
                     ->orWhere('string_id', 'like', "%$query%")
                     ->orWhereHas('videoCat', function ($subQuery) use ($query) {
                         $subQuery->where('category_name', 'like', "%$query%");
@@ -336,12 +337,12 @@ class VideoTemplateController extends AppBaseController
         // Validate relation_id is numeric and file uploads
         $this->validate($request, [
             'relation_id' => 'required|integer|min:0',
-            'video_thumb' => 'required|file|mimes:webp|max:100',
+            'video_thumb' => 'required|file|mimes:webp|max:50',
             'video_file' => 'required|file|mimes:mp4|max:10240',
             'zip_file' => 'required|file|mimes:zip|max:15000',
         ], [
             'video_thumb.mimes' => 'Video Thumb must be in WebP format only!',
-            'video_thumb.max' => 'Video Thumb size must be less than 100 KB!',
+            'video_thumb.max' => 'Video Thumb size must be less than 50 KB!',
             'video_file.mimes' => 'Video File must be in MP4 format only!',
             'video_file.max' => 'Video File size must be less than 10 MB!',
         ]);
@@ -519,11 +520,11 @@ class VideoTemplateController extends AppBaseController
                 return response()->json(['status' => false, 'error' => 'Video Thumb must be in WebP format only!'], 422);
             }
 
-            // Check file size (100 KB = 100 * 1024 bytes)
-            $maxSize = 100 * 1024; // 100 KB
+            // Check file size (50 KB = 50 * 1024 bytes)
+            $maxSize = 50 * 1024; // 50 KB
             if ($video_thumb->getSize() > $maxSize) {
                 $currentSize = round($video_thumb->getSize() / 1024, 2);
-                return response()->json(['status' => false, 'error' => "Video Thumb size must be less than 100 KB! Current size: {$currentSize} KB"], 422);
+                return response()->json(['status' => false, 'error' => "Video Thumb size must be less than 50 KB! Current size: {$currentSize} KB"], 422);
             }
 
             $bytes = random_bytes(20);
@@ -865,7 +866,7 @@ class VideoTemplateController extends AppBaseController
             }
             if ($res->category_id) {
                 $cat = VideoCategory::whereId($res->category_id)->first();
-                if ($cat->parent_category_id == 0) {
+                if ($cat && $cat->parent_category_id == 0) {
                     return response()->json([
                         'error' => 'You cannot assign template to parent Category'
                     ]);

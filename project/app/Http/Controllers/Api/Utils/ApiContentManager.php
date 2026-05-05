@@ -453,7 +453,7 @@ class ApiContentManager
                 if ($content->type == 'api_virtual') {
                     $ctaItem = $content->value;
 
-                    $query = VideoTemplate::query()->with(['videoCat', 'virtualCat'])->whereDoFrontLottie(1)->whereIsDeleted(0)->whereStatus(1);
+                    $query = VideoTemplate::query()->with(['videoCat', 'virtualCat'])->whereTemplateType(0)->whereIsDeleted(0)->whereStatus(1);
 
                     $conditions = explode(' && ', $ctaItem->query);
                     $limit = QueryManager::applyConditionToQuery($query, $conditions, HelperController::getPaginationLimit(), "videovirtualcolumns");

@@ -388,7 +388,7 @@
                                 @endif
                                 <select class="selectpicker form-control" data-style="btn-outline-primary"
                                     name="{{ $restrictSeoExecInternBasicSeo ? 'no_index_display' : 'no_index' }}"
-                                    @if ($restrictSeoExecInternBasicSeo) disabled @endif>
+                                    id="no_index" @if ($restrictSeoExecInternBasicSeo) disabled @endif>
                                     @if (($dataArray['item']->no_index ?? 1) == '1')
                                         <option value="1" selected>TRUE</option>
                                         <option value="0">FALSE</option>
@@ -415,6 +415,7 @@
                         </div>
                     </div>
                     @include('videos.partials.sitemap_seo_fields', [
+                        'no_index' => $dataArray['item']->no_index ?? 1,
                         'priority' => $dataArray['item']->priority ?? 0.90,
                         'frequency' => $dataArray['item']->frequency ?? 'daily',
                     ])
@@ -1479,6 +1480,47 @@
     });
 </script>
 @endif
+
+<script>
+    $(document).ready(function() {
+        function handleNoIndexChange() {
+            const noIndexValue = $('#no_index').val();
+            const $priority = $('#priority');
+            const $frequency = $('#frequency');
+
+            if (noIndexValue == '1') {
+                $priority.prop('disabled', true).css({
+                    'background-color': '#e9ecef',
+                    'cursor': 'not-allowed'
+                });
+                $frequency.prop('disabled', true).css({
+                    'background-color': '#e9ecef',
+                    'cursor': 'not-allowed'
+                });
+            } else {
+                // Only enable if the element exists
+                $priority.prop('disabled', false).css({
+                    'background-color': '',
+                    'cursor': ''
+                });
+                $frequency.prop('disabled', false).css({
+                    'background-color': '',
+                    'cursor': ''
+                });
+            }
+            
+            if ($.fn.selectpicker) {
+                $frequency.selectpicker('refresh');
+            }
+        }
+
+        // Initialize on load
+        handleNoIndexChange();
+
+        // Listen for changes
+        $('#no_index').on('change', handleNoIndexChange);
+    });
+</script>
 
 </body>
 </html>

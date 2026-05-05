@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin\Video;
 
+use App\Http\Controllers\Admin\PendingTaskController;
 use App\Http\Controllers\Admin\AppBaseController;
 use App\Http\Controllers\Admin\Utils\ContentManager;
 use App\Http\Controllers\Utils\HelperController;
@@ -14,6 +15,7 @@ use App\Models\Video\VideoVirtualCategory;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 
 class VideoVirtualCategoryController extends AppBaseController
 {
@@ -47,7 +49,8 @@ class VideoVirtualCategoryController extends AppBaseController
                 'children' => $children
             ];
         }
-        return view('videos.virtual_cat.create_video_virtual_cat', compact('columns', 'operators', 'assignSubCat', 'groupedVideoCategories'));
+        $nextSequenceNumber = (VideoVirtualCategory::max('sequence_number') ?? 0) + 1;
+        return view('videos.virtual_cat.create_video_virtual_cat', compact('columns', 'operators', 'assignSubCat', 'groupedVideoCategories', 'nextSequenceNumber'));
     }
 
 
@@ -57,19 +60,26 @@ class VideoVirtualCategoryController extends AppBaseController
             $currentuserid = Auth::user()->id;
             $idAdmin = roleManager::isAdmin(Auth::user()->user_type);
 
-            // Validate character limits for meta_desc and short_desc
-            $request->validate([
-                'meta_desc' => 'nullable|string|max:160',
-                'short_desc' => 'nullable|string|max:350',
-            ]);
-
-            $res = null;
-            $canonical_link = $request->input('canonical_link');
-
             // Check for ID from route parameter or request input
             $categoryId = $id ?? $request->input('id');
 
+            // Validate character limits and unique sequence number
+            $validator = Validator::make($request->all(), [
+                'meta_desc' => 'nullable|string|max:160',
+                'short_desc' => 'nullable|string|max:350',
+                'sequence_number' => 'required|unique:virtual_categories,sequence_number' . ($categoryId ? ',' . $categoryId : ''),
+            ], [
+                'sequence_number.unique' => 'this sequence_number is alrady assign so plz chnage it',
+            ]);
 
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => $validator->errors()->first()
+                ]);
+            }
+
+            $res = null;
+            $canonical_link = $request->input('canonical_link');
 
             $parent_category_id = $request->input('parent_category_id');
             if (!$parent_category_id) {
@@ -124,13 +134,11 @@ class VideoVirtualCategoryController extends AppBaseController
             $user = Auth::user();
             $userType = $user->user_type;
 
-            if (!RoleManager::isAdminOrSeoManager($userType)) {
-                $accessCheck = $this->isAccessByRole("seo", $categoryId, $res->emp_id ?? $currentuserid, [$res['seo_emp_id']]);
-                if ($accessCheck) {
-                    return response()->json([
-                        'error' => $accessCheck,
-                    ]);
-                }
+            $accessCheck = $this->isAccessByRole("seo_all", $categoryId, $res->emp_id ?? $currentuserid, [$res['seo_emp_id']]);
+            if ($accessCheck) {
+                return response()->json([
+                    'error' => $accessCheck,
+                ]);
             }
 
             // Validate canonical link for video virtual categories
@@ -242,7 +250,7 @@ class VideoVirtualCategoryController extends AppBaseController
             $res->banner = $request->banner ? ContentManager::saveImageToPath($request->banner, 'uploadedFiles/banner_file/' . bin2hex(random_bytes(20)) . Carbon::now()->timestamp) : null;
             $res->mockup = $request->mockup ? ContentManager::saveImageToPath($request->mockup, 'uploadedFiles/thumb_file/' . bin2hex(random_bytes(20)) . Carbon::now()->timestamp) : null;
             $res->top_keywords = json_encode($topKeywords);
-            $res->sequence_number = $request->input('sequence_number') ?: 0;
+            $res->sequence_number = $request->input('sequence_number');
             if (!RoleManager::isSeoIntern(Auth::user()->user_type)) {
                 $res->status = $request->input('status');
             } else {
@@ -250,14 +258,25 @@ class VideoVirtualCategoryController extends AppBaseController
             }
             $res->parent_category_id = $parent_category_id;
             $this->applyVideoSitemapFieldsFromRequest($request, $res, !$res->exists);
-            $res->save();
 
-            StorageUtils::delete($oldContentPath);
-            StorageUtils::delete($oldFaqPath);
+            if (RoleManager::isAdminOrSeoManager(auth()->user()->user_type)) {
+                StorageUtils::delete($oldContentPath);
+                StorageUtils::delete($oldFaqPath);
+            }
 
-            return response()->json([
-                'success' => "done"
-            ]);
+            $previewRoute = route('edit_video_virtual_cat', ['id' => $res->id ?? 0]);
+
+            return PendingTaskController::store(
+                $res,
+                VideoVirtualCategory::class,
+                'Video Virtual Category',
+                $categoryId ? 'Video Virtual Category Update' : 'Video Virtual Category Add',
+                "v_vcat",
+                $categoryId ? 'update' : 'add',
+                $previewRoute,
+                RoleManager::isAdminOrSeoManager(auth()->user()->user_type),
+                $res->category_name
+            );
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
@@ -270,6 +289,7 @@ class VideoVirtualCategoryController extends AppBaseController
         $searchableFields = [
             ['id' => 'id', 'value' => 'ID'],
             ['id' => 'category_name', 'value' => 'Category Name'],
+            ['id' => 'slug', 'value' => 'Slug'],
             ['id' => 'sequence_number', 'value' => 'Sequence Number'],
             ['id' => 'no_index', 'value' => 'No Index'],
             ['id' => 'status', 'value' => 'Status'],
@@ -290,22 +310,66 @@ class VideoVirtualCategoryController extends AppBaseController
     }
 
 
-    public function edit(VideoVirtualCategory $mainCategory, $id)
+    public function edit(Request $request, $id)
     {
-        $res = VideoVirtualCategory::find($id);
-        if (!$res) {
-            abort(404);
+        $isPreview = $request->query('preview');
+        $datas = [];
+
+        if ($id == 0 && $isPreview) {
+            $res = new VideoVirtualCategory();
+            $res->id = 0;
+        } else {
+            $res = VideoVirtualCategory::find($id);
+            if (!$res) {
+                abort(404);
+            }
+        }
+
+        if ($isPreview) {
+            $pendingTask = \App\Models\PendingTask::where('table_name', 'v_vcat')
+                ->where(function($q) use ($id) {
+                    if ($id == 0) {
+                        $q->whereNull('record_id')->orWhere('record_id', 0);
+                    } else {
+                        $q->where('record_id', $id);
+                    }
+                })
+                ->where('status', 0)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($pendingTask) {
+                $data = json_decode($pendingTask->data, true);
+                $res->fill($data);
+                $datas['pendingTask'] = $pendingTask;
+                \Log::info('Previewing virtual category from pending task', ['task_id' => $pendingTask->id]);
+            }
         }
 
         if (isset($res->top_keywords)) {
-            $res->top_keywords = json_decode($res->top_keywords);
+            if (is_string($res->top_keywords)) {
+                $res->top_keywords = json_decode($res->top_keywords);
+            }
         } else {
             $res->top_keywords = [];
         }
 
         $allCategories = VideoVirtualCategory::all();
-        $res->contents = isset($res->contents) ? StorageUtils::get($res->contents) : "";
-        $res->faqs = isset($res->faqs) ? StorageUtils::get($res->faqs) : "";
+
+        // Load contents and faqs (with safety)
+        try {
+            $res->contents = (isset($res->contents) && $res->contents != "") ? StorageUtils::get($res->contents) : "";
+        } catch (\Exception $e) {
+            \Log::error('Failed to load virtual content for edit/preview', ['path' => $res->contents ?? 'null', 'error' => $e->getMessage()]);
+            $res->contents = "";
+        }
+
+        try {
+            $res->faqs = (isset($res->faqs) && $res->faqs != "") ? StorageUtils::get($res->faqs) : "";
+        } catch (\Exception $e) {
+            \Log::error('Failed to load virtual FAQs for edit/preview', ['path' => $res->faqs ?? 'null', 'error' => $e->getMessage()]);
+            $res->faqs = "";
+        }
 
 
         // Parse CTA section from contents
@@ -353,7 +417,7 @@ class VideoVirtualCategoryController extends AppBaseController
 
     public function destroy($id)
     {
-//        $idAdmin = RoleManager::isAdminOrSeoManager(Auth::user()->user_type);
+        //        $idAdmin = RoleManager::isAdminOrSeoManager(Auth::user()->user_type);
 //        if ($idAdmin) {
 //            $res = VideoVirtualCategory::find($id);
 //            if ($res) {

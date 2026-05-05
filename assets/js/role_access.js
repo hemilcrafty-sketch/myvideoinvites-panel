@@ -42,7 +42,6 @@ const roleAccessMap = {
       "accept-reject-btn",
     ],
     exceptionClass: [
-      "seo-access-container",
       "preview-mode",
       "designer-access-container",
       "designer-employee-container",
@@ -51,7 +50,22 @@ const roleAccessMap = {
   },
   "SEO Executive": {
     isAccess: true,
-    accessClass: ["all", "filter-access", "attire-access"],
+    accessClass: [
+      "all",
+      "filter-access",
+      "attire-access",
+      "status",
+      "keyword-id",
+      "virtual-id",
+      "submit-btn",
+      "seo-submit",
+      "no-index",
+      "parent_cat_access",
+      "check-primary-density-btn",
+      "check-density-btn",
+      "new_cat_id_item",
+      "accept-reject-btn",
+    ],
     exceptionClass: [
       "preview-mode",
       "canonical_link",
@@ -65,6 +79,8 @@ const roleAccessMap = {
     isAccess: true,
     accessClass: ["all", "filter-access"],
     exceptionClass: [
+      "seo-access-container",
+      "seo-all-container",
       "canonical_link",
       "status",
       "designer-access-container",

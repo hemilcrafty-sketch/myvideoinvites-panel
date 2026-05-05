@@ -14,6 +14,7 @@ use App\Models\UserSession;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Auth;
 use Kreait\Firebase\Exception\AuthException;
 use Kreait\Firebase\Exception\FirebaseException;
@@ -28,7 +29,11 @@ class UserApiController extends ApiController
     {
         parent::__construct($request);
         if ($auth == null) {
-            $serviceAccountPath = "/private-files/video-firebase-service-account.json";
+        $serviceAccountPath = storage_path('app/firebase/video-firebase-service-account.json');
+
+        if (!file_exists($serviceAccountPath)) {
+            throw new \Exception("Firebase JSON not found at: " . $serviceAccountPath);
+        }
             $factory = (new Factory)->withServiceAccount($serviceAccountPath);
             $this->auth = $factory->createAuth();
         } else {
@@ -45,6 +50,7 @@ class UserApiController extends ApiController
         $photo_uri = $request->file('photo_uri');
         $name = $request->get('name');
         $updateDp = $request->get('update_dp');
+        $contact_no = $request->get('contact_no');
 
         $userData = UserData::where("uid", $this->uid)->first();
 
@@ -83,6 +89,9 @@ class UserApiController extends ApiController
         }
 
         $userData->name = $name;
+        if ($request->has('contact_no')) {
+            $userData->contact_no = $contact_no;
+        }
         $userData->save();
 
         $userData = UserData::where("uid", $this->uid)->first();
@@ -113,8 +122,14 @@ class UserApiController extends ApiController
         $res->save();
 
         try {
-
-            $this->auth->deleteUser($user_data->uid);
+            try {
+                $this->auth->deleteUser($user_data->uid);
+            } catch (Exception $e) {
+                // If user is not found in Firebase, we should still proceed with local deletion
+                if (!str_contains(strtolower($e->getMessage()), 'not found') && !str_contains(strtolower($e->getMessage()), 'no user')) {
+                    throw $e;
+                }
+            }
 
             $res = new UserDataDeleted();
             $res->user_int_id = $user_data->id;
@@ -125,7 +140,7 @@ class UserApiController extends ApiController
             $res->photo_uri = $user_data->photo_uri;
             $res->name = $user_data->name;
             $res->country_code = $user_data->country_code;
-            $res->number = $user_data->number;
+            $res->number = $user_data->contact_no;
             $res->email = $user_data->email;
             $res->login_type = $user_data->login_type;
             $res->total_validity = $user_data->total_validity;
@@ -146,6 +161,7 @@ class UserApiController extends ApiController
 
             return $this->successed(msg: "Your account has been successfully deleted.");
         } catch (Exception|AuthException|FirebaseException $e) {
+            Log::info($e->getMessage());
             return $this->failed();
         }
     }
@@ -191,7 +207,7 @@ class UserApiController extends ApiController
         $user['uid'] = $userData->uid;
         $user['name'] = $userData->name;
         $user['email'] = $userData->email;
-        $user['number'] = $userData->number;
+        $user['number'] = $userData->contact_no;
         $user['contact_no'] = $userData->contact_no;
         $user['user_name'] = $userData->user_name;
         $user['is_username_update'] = $userData->is_username_update == 1;

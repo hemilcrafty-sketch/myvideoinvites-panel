@@ -38,11 +38,17 @@ class VideoSlugHistory extends Model
         'reference_id','reference_type','slug'
     ];
 
+    public function setSlugAttribute($value)
+    {
+        $this->attributes['slug'] = ltrim($value, '/');
+    }
+
     public static function checkSlugValidation(string|null $slug, $id = 0): ?string
     {
         if (!$slug) {
             return "Slug is Required";
         }
+        $slug = ltrim($slug, '/');
 
         // ❌ Should not end with '/'
         if (str_ends_with($slug, '/')) {
@@ -91,7 +97,7 @@ class VideoSlugHistory extends Model
             $slugHistory->reference_type = $type;
         }
 
-        $slugHistory->slug = $slug;
+        $slugHistory->slug = ltrim($slug, '/');
         $slugHistory->save();
     }
 

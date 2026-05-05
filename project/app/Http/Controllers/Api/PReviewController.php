@@ -7,8 +7,9 @@ use App\Http\Controllers\Api\Utils\ApiController;
 use App\Http\Controllers\Api\Utils\ResponseHandler;
 use App\Http\Controllers\Api\Utils\ResponseInterface;
 use App\Http\Controllers\Utils\HelperController;
-use App\Models\PReview;
 use App\Models\Video\VideoCategory;
+use App\Models\Video\VideoPageReview;
+use App\Models\Video\VideoReview;
 use App\Models\Video\VideoTemplate;
 use App\Models\Video\VideoVirtualCategory;
 use Illuminate\Http\Request;
@@ -26,7 +27,7 @@ class PReviewController extends ApiController
         ["user_id" => null, "name" => "Pooja Sharma", "email" => null, "photo_uri" => null, "rate" => 5, "feedback" => "MyVideoInvites is amazing! Whether you need a simple Video Invitation or a creative Wedding Video Invitation, they have everything. The designs are beautiful, the quality is excellent, and the platform is very reliable. Perfect for creating memorable Digital Video Invitations and Engagement Video Invitations.", "created_at" => "02-02-2026"],
     ];
 
-    private static array $types = [0, 1, 2, 3, 4, 5, 6, 7, 8];  //"template", "category", "spage", "kpage"
+    private static array $types = [0, 1, 2, 3, 4, 5, 6, 7, 8]; 
 
     public function postReview(Request $request): array|string
     {
@@ -42,7 +43,7 @@ class PReviewController extends ApiController
             return ResponseHandler::sendResponse($request, new ResponseInterface(401, false, "Invalid params"));
         }
 
-        $exists = PReview::where('p_type', $type)->where('p_id', $id)->where('user_id', $this->uid)->exists();
+        $exists = VideoPageReview::where('p_type', $type)->where('p_id', $id)->where('user_id', $this->uid)->exists();
         if ($exists) {
             return ResponseHandler::sendResponse($request, new ResponseInterface(422, false, "Review already exists"));
         }
@@ -59,7 +60,7 @@ class PReviewController extends ApiController
         $feedback = $request->feedback;
         $rate = $request->rate;
 
-        $res = new PReview();
+        $res = new VideoPageReview();
         $res->user_id = $this->uid;
         $res->p_type = $type;
         $res->p_id = $id;
@@ -67,7 +68,7 @@ class PReviewController extends ApiController
         $res->rate = $rate;
         $res->save();
 
-        $review = PReview::where('p_type', $type)->where('p_id', $id)->where('user_id', $this->uid)->first();
+        $review = VideoPageReview::where('p_type', $type)->where('p_id', $id)->where('user_id', $this->uid)->first();
         if ($review) {
             $userReview = PReviewController::getUserInfo($review);
         } else {
@@ -98,7 +99,7 @@ class PReviewController extends ApiController
             return ResponseHandler::sendResponse($request, new ResponseInterface(401, false, "Unauthorized"));
         }
 
-        $delete = PReview::where('id', $request->id)->where('user_id', $this->uid)->delete();
+        $delete = VideoPageReview::where('id', $request->id)->where('user_id', $this->uid)->delete();
 
         if ($delete) {
             return ResponseHandler::sendResponse($request, new ResponseInterface(200, true, "Delete Record Successfully."));
@@ -128,10 +129,10 @@ class PReviewController extends ApiController
             'is_approve' => 0
         ];
 
-        $update = PReview::where('id', $request->id)->where('user_id', $this->uid)->update($input);
+        $update = VideoPageReview::where('id', $request->id)->where('user_id', $this->uid)->update($input);
 
         if ($update) {
-            $review = PReview::where('id', $request->id)->where('user_id', $this->uid)->first();
+            $review = VideoPageReview::where('id', $request->id)->where('user_id', $this->uid)->first();
             if ($review) {
                 $userReview = PReviewController::getUserInfo($review);
             } else {
@@ -152,9 +153,9 @@ class PReviewController extends ApiController
 
         $limit = HelperController::getPaginationLimit(size: 50);
 
-        $reviewsQuery = PReview::query()->with(['user'])->where('p_type', $type)->where('p_id', $id)->where('is_approve', 1);
+        $reviewsQuery = VideoPageReview::query()->with(['user'])->where('p_type', $type)->where('p_id', $id)->where('is_approve', 1);
         if ($userId) {
-//            $reviewsQuery = $reviewsQuery->where('user_id', "!=", $userId);
+            //            $reviewsQuery = $reviewsQuery->where('user_id', "!=", $userId);
         }
         $reviewsQuery = $reviewsQuery->orderBy('id', 'DESC')->paginate($limit, ['*'], 'page', $page);
 
@@ -174,7 +175,7 @@ class PReviewController extends ApiController
 
         $userReview = null;
         if ($userId) {
-            $review = PReview::where('p_type', $type)->where('p_id', $id)->where('user_id', $userId)->first();
+            $review = VideoPageReview::where('p_type', $type)->where('p_id', $id)->where('user_id', $userId)->first();
             if ($review) {
                 $userReview = PReviewController::getUserInfo($review);
             }
@@ -225,7 +226,7 @@ class PReviewController extends ApiController
 
     private static function getTotalRating($type, $id): array
     {
-        $reviewsQuery = PReview::query()->where('p_type', $type)->where('p_id', $id)->where('is_approve', 1);
+        $reviewsQuery = VideoPageReview::query()->where('p_type', $type)->where('p_id', $id)->where('is_approve', 1);
 
         $totalReviews = (clone $reviewsQuery)->count();
 

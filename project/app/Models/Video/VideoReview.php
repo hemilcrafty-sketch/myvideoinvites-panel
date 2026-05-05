@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
  * App\Models\Video\VideoReview
  *
  * @property int $id
- * @property int|null $user_id User ID from main database
+ * @property string|null $user_id User ID from main database
  * @property string|null $name
  * @property string|null $email
  * @property string|null $photo_uri

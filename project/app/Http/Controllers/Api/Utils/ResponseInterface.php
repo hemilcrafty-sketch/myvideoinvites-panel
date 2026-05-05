@@ -18,11 +18,12 @@ class ResponseInterface
         $this->datas = $datas;
     }
 
-    public function toArray(): array
+    public function toArray(bool $noIndex = false): array
     {
         $response['statusCode'] = $this->statusCode;
         $response['success'] = $this->success;
         $response['msg'] = $this->msg;
+        $response['noIndex'] = $noIndex;
 
         foreach ($this->datas as $key => $value) {
             $response[$key] = $value;

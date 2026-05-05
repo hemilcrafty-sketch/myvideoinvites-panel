@@ -176,7 +176,7 @@
                                     <input type="text" class="form-control canonical_link"
                                         name="canonical_link" />
                                 </div>
-                                <p class="text-end" style="font-size: 12px;">Only admin or fenil can modify
+                                <p class="text-end" style="font-size: 12px;">Only admin or SEO Manager can modify
                                     canonical link</p>
                             </div>
                         </div>
@@ -202,8 +202,8 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Meta Title</h6>
-                                <input class="form-control" type="text" name="meta_title" maxlength="60"
-                                    oninput="updateMetaCount(this)" required>
+                                <input class="form-control" type="text" name="meta_title" id="meta_title" maxlength="60"
+                                    oninput="updateCount(this, 'metaCounter')" required>
                                 <small id="metaCounter" class="text-muted">0 / 60</small>
                             </div>
                         </div>
@@ -221,18 +221,13 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>H1 Tag</h6>
-                                <input class="form-control" type="text" name="h1_tag" maxlength="60"
+                                <input class="form-control" type="text" name="h1_tag" id="h1_tag" maxlength="60"
                                     oninput="updateCount(this, 'h1Counter')" required>
                                 <small id="h1Counter" class="text-muted">60 remaining of 60 letters</small>
                             </div>
                         </div>
 
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <h6>Tag Line</h6>
-                                <input class="form-control" type="text" name="tag_line" required>
-                            </div>
-                        </div>
+
 
                         <div class="col-md-6">
                             <div class="form-group">
@@ -244,7 +239,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Meta Desc</h6>
-                                <textarea style="height: 120px" class="form-control" name="meta_desc" maxlength="160" oninput="updateCount(this, 'metaDescCounter')"></textarea>
+                                <textarea style="height: 120px" class="form-control" name="meta_desc" id="meta_desc" maxlength="160" oninput="updateCount(this, 'metaDescCounter')"></textarea>
                                 <small id="metaDescCounter" class="text-muted">160 remaining of 160 characters</small>
                             </div>
                         </div>
@@ -252,7 +247,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Short Desc</h6>
-                                <textarea style="height: 120px" class="form-control" name="short_desc" maxlength="350" oninput="updateCount(this, 'shortDescCounter')"></textarea>
+                                <textarea style="height: 120px" class="form-control" name="short_desc" id="short_desc" maxlength="350" oninput="updateCount(this, 'shortDescCounter')"></textarea>
                                 <small id="shortDescCounter" class="text-muted">350 remaining of 350 characters</small>
                             </div>
                         </div>
@@ -313,12 +308,7 @@
                     </div>
                     <input type="hidden" name="parent_category_id" value="0">
 
-                    <div class="form-group">
-                        <h6>Banner</h6>
-                        <input type="file" accept=".jpg, .jpeg, .webp, .svg"
-                            class="form-control-file form-control height-auto dynamic-file"
-                            data-imgstore-id="banner" data-nameset="true">
-                    </div>
+
 
                     <div class="form-group">
                         <div class="col-md-6">
@@ -370,7 +360,7 @@
                     <div class="form-group">
                         <h6>Sequence Number</h6>
                         <input class="form-control" type="number" id="sequence_number" name="sequence_number"
-                            required>
+                            value="{{ $nextSequenceNumber }}" required>
                     </div>
 
                     <div class="form-group">
@@ -492,20 +482,9 @@
         });
     });
 
-    function updateMetaCount(input) {
-        const max = 60;
-        const remaining = max - input.value.length;
-        document.getElementById('metaCounter').textContent =
-            remaining + ' remaining of ' + max + ' letters';
-    }
-
     function updateCount(input, counterId) {
-        let max = 60; // default
-        if (counterId === 'metaCounter') max = 60;
-        if (counterId === 'h1Counter') max = 60;
-        if (counterId === 'metaDescCounter') max = 160;
-        if (counterId === 'shortDescCounter') max = 350;
-
+        if (!input) return;
+        const max = input.getAttribute('maxlength') || 60;
         const remaining = max - input.value.length;
         const counterElement = document.getElementById(counterId);
         if (counterElement) {

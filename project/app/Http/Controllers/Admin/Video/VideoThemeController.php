@@ -44,8 +44,6 @@ class VideoThemeController extends AppBaseController
                 'hasChildren' => $children->isNotEmpty()
             ];
         }
-
-
         return view('videos.filters.themes')->with([
             'themeArray' => $filteredThemes,
             'allCategories' => $allCategories,

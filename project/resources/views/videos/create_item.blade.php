@@ -34,7 +34,7 @@
                         <h6>Video Thumb</h6>
                         <input type="file" id="video_thumb" class="form-control-file form-control height-auto"
                             name="video_thumb" accept=".webp" required>
-                        <small class="text-muted">Only WebP format, max 100 KB</small>
+                        <small class="text-muted">Only WebP format, max 50 KB</small>
                     </div>
 
                     <div class="form-group">
@@ -342,10 +342,10 @@
                 return;
             }
 
-            // Validate file size (100 KB = 100 * 1024 bytes)
-            const maxSize = 100 * 1024; // 100 KB
+            // Validate file size (50 KB = 50 * 1024 bytes)
+            const maxSize = 50 * 1024; // 50 KB
             if (file.size > maxSize) {
-                alert('Video Thumb size must be less than 100 KB! Current size: ' + (file.size / 1024).toFixed(2) + ' KB');
+                alert('Video Thumb size must be less than 50 KB! Current size: ' + (file.size / 1024).toFixed(2) + ' KB');
                 $(this).val('');
                 return;
             }
@@ -390,8 +390,8 @@
                 alert('Only WebP format is allowed for Video Thumb!');
                 return;
             }
-            if (videoThumb.size > 100 * 1024) {
-                alert('Video Thumb size must be less than 100 KB!');
+            if (videoThumb.size > 50 * 1024) {
+                alert('Video Thumb size must be less than 50 KB!');
                 return;
             }
         }

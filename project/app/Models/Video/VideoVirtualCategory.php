@@ -127,4 +127,13 @@ class VideoVirtualCategory extends Model
         $category->saveQuietly();
     }
 
+    public function getSlugAttribute($value): string
+    {
+        return '/' . ltrim($value, '/');
+    }
+
+    public function setSlugAttribute($value)
+    {
+        $this->attributes['slug'] = ltrim($value, '/');
+    }
 }

@@ -1,6 +1,22 @@
 @inject('roleManager', 'App\Http\Controllers\Utils\RoleManager')
 @inject('contentManager', '\App\Http\Controllers\Admin\Utils\ContentManager')
 @inject('helperController', 'App\Http\Controllers\Utils\HelperController')
+
+<script>
+    // Standard global function definition
+    function updateCount(input, counterId) {
+        if (!input) return;
+        if (document.querySelector('form.preview-mode')) return;
+        var max = parseInt(input.getAttribute('maxlength')) || 60;
+        var currentLength = input.value ? input.value.length : 0;
+        var remaining = max - currentLength;
+        var counterElement = document.getElementById(counterId);
+        if (counterElement) {
+            counterElement.textContent = remaining + ' remaining of ' + max + ' characters';
+            // console.log('Counter Updated:', counterId, remaining);
+        }
+    }
+</script>
 @include('layouts.masterhead')
 <div class="main-container seo-all-container">
 
@@ -13,7 +29,10 @@
                 'primary_keyword' => $datas['cat']->primary_keyword,
             ])
             <div class="pd-20 card-box mb-30">
-                <form method="post" id="dynamic_form" enctype="multipart/form-data">
+                <div class="section-header" style="font-size: 18px; font-weight: 600; color: #1a1a1a; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #f0f0f0; display: flex; align-items: center;">
+                    Edit Video Virtual Category {{ request('preview') ? '(Preview Mode)' : '' }}
+                </div>
+                <form method="post" id="dynamic_form" enctype="multipart/form-data" class="{{ request('preview') ? 'preview-mode' : '' }}">
 
                     <span id="result"></span>
 
@@ -45,7 +64,7 @@
                                     <input type="text" class="form-control canonical_link" name="canonical_link"
                                         value="{{ $datas['cat']->canonical_link }}" />
                                 </div>
-                                <p class="text-end" style="font-size: 12px;">Only admin or fenil can modify canonical
+                                <p class="text-end" style="font-size: 12px;">Only admin or SEO Manager can modify canonical
                                     link</p>
                             </div>
                         </div>
@@ -70,6 +89,7 @@
 
                     </div>
                     @include('videos.partials.sitemap_seo_fields', [
+                        'no_index' => $datas['cat']->no_index ?? 1,
                         'priority' => $datas['cat']->priority ?? 0.90,
                         'frequency' => $datas['cat']->frequency ?? 'daily',
                     ])
@@ -79,9 +99,9 @@
                             <div class="form-group">
                                 <h6>Meta Title</h6>
                                 <input class="form-control" type="text" name="meta_title" id="meta_title"
-                                    maxlength="60" oninput="updateCount(this, 'metaCounter')"
+                                    maxlength="60"
                                     value="{{ $datas['cat']->meta_title }}" required>
-                                <small id="metaCounter" class="text-muted">60 remaining of 60 characters</small>
+                                <small id="metaCounter" class="text-muted"></small>
                             </div>
                         </div>
 
@@ -97,9 +117,9 @@
                             <div class="form-group">
                                 <h6>H1 Tag</h6>
                                 <input class="form-control" type="text" name="h1_tag" id="h1_tag" maxlength="60"
-                                    oninput="updateCount(this, 'h1Counter')" value="{{ $datas['cat']->h1_tag }}"
+                                    value="{{ $datas['cat']->h1_tag }}"
                                     required>
-                                <small id="h1Counter" class="text-muted">60 remaining of 60 characters</small>
+                                <small id="h1Counter" class="text-muted"></small>
                             </div>
                         </div>
 
@@ -113,8 +133,8 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Meta Desc</h6>
-                                <textarea style="height: 120px" class="form-control" name="meta_desc" maxlength="160" oninput="updateCount(this, 'metaDescCounter')">{{ $datas['cat']->meta_desc }}</textarea>
-                                <small id="metaDescCounter" class="text-muted">160 remaining of 160 characters</small>
+                                <textarea style="height: 120px" class="form-control" name="meta_desc" id="meta_desc" maxlength="160">{{ $datas['cat']->meta_desc }}</textarea>
+                                <small id="metaDescCounter" class="text-muted"></small>
                             </div>
                         </div>
 
@@ -122,19 +142,13 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <h6>Short Desc</h6>
-                                <textarea style="height: 120px" class="form-control" name="short_desc" maxlength="350" oninput="updateCount(this, 'shortDescCounter')">{{ $datas['cat']->short_desc }}</textarea>
-                                <small id="shortDescCounter" class="text-muted">350 remaining of 350 characters</small>
+                                <textarea style="height: 120px" class="form-control" name="short_desc" id="short_desc" maxlength="350">{{ $datas['cat']->short_desc }}</textarea>
+                                <small id="shortDescCounter" class="text-muted"></small>
                             </div>
                         </div>
 
 
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <h6>Tag Line</h6>
-                                <input class="form-control" type="textname" name="tag_line"
-                                    value="{{ $datas['cat']->tag_line }}" required>
-                            </div>
-                        </div>
+
 
                     </div>
 
@@ -168,16 +182,7 @@
 
                         </div>
                     </div>
-                    <div class="form-group">
-                        <h6>Banner</h6>
-                        <input type="file" data-accept=".jpg, .jpeg, .webp, .svg"
-                            class="form-control-file form-control height-auto dynamic-file " data-imgstore-id="banner"
-                            data-value="{{ $contentManager::getStorageLink($datas['cat']->banner) }}"
-                            data-required="false" data-nameset="true"><br />
-                        <!-- <img src="{{ config('filesystems.storage_url') }}{{ $datas['cat']->banner }}" width="100" />
-                        <input class="form-control" type="textname" id="banner_path" name="banner_path"
-                          value="{{ $datas['cat']->banner }}" style="display: none"> -->
-                    </div>
+
 
                     <div class="form-group">
                         <h6>Parent Category</h6>
@@ -227,265 +232,337 @@
 
                     {{-- Add hidden field for generatedQuery with empty value for video virtual categories --}}
                     <input type="hidden" name="generatedQuery" value="">
-
-                    <div>
-                        <input class="btn btn-primary submit-btn" type="submit" name="submit">
-                    </div>
                     </form>
+
+                    <div class="action-buttons mt-4 d-flex gap-2">
+                        @if(!request('preview'))
+                            <input class="btn btn-primary submit-btn" type="submit" name="submit" value="Update Category">
+                        @else
+                            @if(isset($datas['pendingTask']) && $roleManager::isAdminOrSeoManager(Auth::user()->user_type))
+                                <button type="button" class="btn btn-success" onclick="approveTask('{{ $datas['pendingTask']->id }}')">
+                                    <i class="fa fa-check"></i> Approve
+                                </button>
+                                <button type="button" class="btn btn-danger" onclick="openRejectModal('{{ $datas['pendingTask']->id }}')">
+                                    <i class="fa fa-times"></i> Reject
+                                </button>
+                            @endif
+                        @endif
+                        <a href="{{ request('preview') ? route('show_pending_item') : route('show_video_virtual_cat') }}" class="btn btn-secondary">{{ request('preview') ? 'Back to Tasks' : 'Cancel' }}</a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Reject Reason Modal -->
+    <div class="modal fade" id="rejectModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Reject Task</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="reject_task_id">
+                    <div class="form-group">
+                        <label>Reason for rejection</label>
+                        <textarea id="reject_reason" class="form-control" rows="3" placeholder="Enter reason..." style="min-height: 100px;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="rejectTask()">Submit Rejection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @include('layouts.masterscript')
+
     <script>
-        // Initialize Quill editor for More Template CTA modal
-        let ctaMoreTemplateQuill = null;
+        // Initialize character counters and attach event listeners with safety checks
+        (function() {
+            var fields = [
+                { id: 'meta_title', counter: 'metaCounter' },
+                { id: 'h1_tag', counter: 'h1Counter' },
+                { id: 'meta_desc', counter: 'metaDescCounter' },
+                { id: 'short_desc', counter: 'shortDescCounter' }
+            ];
 
-        $('#api_virtual_modal').on('shown.bs.modal', function () {
-            if (!ctaMoreTemplateQuill) {
-                const ctaMoreTemplateDesc = document.getElementById('ctaMoreTemplateDesc');
-                if (ctaMoreTemplateDesc) {
-                    ctaMoreTemplateQuill = new Quill('#ctaMoreTemplateDesc', {
-                        theme: 'snow',
-                        modules: {
-                            toolbar: [
-                                ['bold', 'italic', 'underline'],
-                                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                                ['link'],
-                                ['clean']
-                            ]
+            function initAllCounters() {
+                if (typeof fields === 'undefined') return;
+                fields.forEach(function(field) {
+                    var el = document.getElementById(field.id);
+                    if (el && typeof updateCount === 'function') {
+                        updateCount(el, field.counter);
+                        if (!el.dataset.counterAttached) {
+                            ['input', 'keyup', 'paste', 'change'].forEach(function(evt) {
+                                el.addEventListener(evt, function() {
+                                    updateCount(el, field.counter);
+                                });
+                            });
+                            el.dataset.counterAttached = "true";
                         }
-                    });
-                }
+                    }
+                });
             }
-        });
 
-        // Only attach virtualcontainer event listeners if it exists
-        const virtualcontainer = document.getElementById("virtualcontainer");
-        if (virtualcontainer) {
-            document.addEventListener("DOMContentLoaded", function() {
-                const virtualInputElem = virtualcontainer.querySelector("#virtualConditionQuery");
-                const virtualCondition = JSON.parse(decodeHTMLEntities(virtualInputElem.value));
-                virtualCondition.forEach((condition) => {
-                    setValueInTable(
-                        condition.column,
-                        condition.columnName,
-                        condition.operator,
-                        condition.value,
-                        condition.secondValue,
-                        null,
-                        virtualcontainer
-                    );
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initAllCounters);
+            } else {
+                initAllCounters();
+            }
+            
+            if (typeof jQuery !== 'undefined') {
+                jQuery(document).ready(initAllCounters);
+            }
+            window.addEventListener('load', initAllCounters);
+            setTimeout(initAllCounters, 100);
+            setTimeout(initAllCounters, 500);
+            setTimeout(initAllCounters, 1000);
+        })();
+
+        // Initialize Quill editor for More Template CTA modal
+        if (typeof ctaMoreTemplateQuill === 'undefined') {
+            var ctaMoreTemplateQuill = null;
+        }
+
+        if (typeof jQuery !== 'undefined') {
+            jQuery('#api_virtual_modal').on('shown.bs.modal', function () {
+                if (!ctaMoreTemplateQuill) {
+                    var ctaMoreTemplateDesc = document.getElementById('ctaMoreTemplateDesc');
+                    if (ctaMoreTemplateDesc && typeof Quill !== 'undefined') {
+                        ctaMoreTemplateQuill = new Quill('#ctaMoreTemplateDesc', {
+                            theme: 'snow',
+                            modules: {
+                                toolbar: [
+                                    ['bold', 'italic', 'underline'],
+                                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                                    ['link'],
+                                    ['clean']
+                                ]
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Category & Subcategory selection handlers
+            jQuery(document).on('click', '#parentCategoryInput', function() {
+                jQuery('.parent-category-input').toggleClass('show');
+            });
+
+            jQuery(document).on("click", ".category", function(event) {
+                jQuery(".category, .subcategory").removeClass("selected");
+                var id = jQuery(this).data('id');
+                jQuery("input[name='parent_category_id']").val(id);
+                jQuery("#parentCategoryInput span").html(jQuery(this).data('catname'));
+                jQuery('.parent-category-input').removeClass('show');
+                jQuery(this).addClass("selected");
+            });
+
+            jQuery(document).on("click", ".subcategory", function(event) {
+                event.stopPropagation();
+                jQuery(".category, .subcategory").removeClass("selected");
+                var id = jQuery(this).data('id');
+                jQuery("input[name='parent_category_id']").val(id);
+                jQuery('.parent-category-input').removeClass('show');
+                jQuery("#parentCategoryInput span").html(jQuery(this).data('catname'));
+                jQuery(this).addClass("selected");
+            });
+
+            jQuery(document).on("click", "li.category.none-option", function() {
+                jQuery("input[name='parent_category_id']").val("0");
+                jQuery('.parent-category-input').removeClass('show');
+                jQuery("#parentCategoryInput span").html('== none ==');
+            });
+
+            jQuery(document).on('click', function(e) {
+                if (typeof jQuery !== 'undefined' && !jQuery(e.target).closest('.form-group.category-dropbox-wrap').length) {
+                    jQuery('.custom-dropdown.parent-category-input.show').removeClass('show');
+                }
+            });
+        }
+    </script>
+
+    <script>
+        // Define columns and sorting with existence checks
+        if (typeof columns === 'undefined') {
+            var columns = @json(config('videovirtualcolumns.columns', []));
+        }
+        if (typeof sorting === 'undefined') {
+            var sorting = @json(config('videovirtualcolumns.sorting', []));
+        }
+    </script>
+
+    <script src="{{ asset('assets/js/video_virtual.js') }}?v={{ time() }}"></script>
+
+    <script>
+        // Initialize virtual container query if it exists
+        if (typeof jQuery !== 'undefined') {
+            jQuery(document).ready(function() {
+                var virtualcontainer = document.getElementById("virtualcontainer");
+                if (virtualcontainer) {
+                    try {
+                        var virtualInputElem = virtualcontainer.querySelector("#virtualConditionQuery");
+                        if (virtualInputElem && virtualInputElem.value) {
+                            var virtualCondition = JSON.parse(decodeHTMLEntities(virtualInputElem.value));
+                            virtualCondition.forEach(function(condition) {
+                                if (typeof setValueInTable === 'function') {
+                                    setValueInTable(
+                                        condition.column,
+                                        condition.columnName,
+                                        condition.operator,
+                                        condition.value,
+                                        condition.secondValue,
+                                        null,
+                                        virtualcontainer
+                                    );
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Error parsing virtual condition query:", e);
+                    }
+
+                    var saveBtn = virtualcontainer.querySelector(".save-condition");
+                    if (saveBtn) {
+                        saveBtn.addEventListener("click", function(event) {
+                            if (typeof saveCondition === 'function') saveCondition(event, virtualcontainer);
+                        });
+                    }
+
+                    var addSortingBtn = virtualcontainer.querySelector(".add-sorting");
+                    if (addSortingBtn) {
+                        addSortingBtn.addEventListener("click", function(event) {
+                            if (typeof addSorting === 'function') addSorting(event, virtualcontainer);
+                        });
+                    }
+                }
+            });
+
+            // Form submission handler
+            jQuery('#dynamic_form').on('submit', function(event) {
+                event.preventDefault();
+                jQuery.ajaxSetup({
+                    headers: { 'X-CSRF-TOKEN': jQuery('meta[name="csrf-token"]').attr('content') }
+                });
+
+                var formData = new FormData(this);
+                formData.append('id', "{{ $datas['cat']->id }}");
+                var url = "{{ url('update_video_virtual_cat', $datas['cat']->id) }}";
+
+                jQuery.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: formData,
+                    beforeSend: function() {
+                        jQuery('#main_loading_screen').show();
+                    },
+                    success: function(data) {
+                        jQuery('#main_loading_screen').hide();
+                        window.alert(data.error || data.success);
+                        setTimeout(function() { jQuery('#result').html(''); }, 3000);
+                    },
+                    error: function(error) {
+                        jQuery('#main_loading_screen').hide();
+                        window.alert(error.responseText);
+                    },
+                    cache: false,
+                    contentType: false,
+                    processData: false
                 });
             });
 
-            virtualcontainer.querySelector(".save-condition")?.addEventListener("click", function(event) {
-                saveCondition(event, virtualcontainer);
-            });
-
-            virtualcontainer.querySelector(".add-sorting")?.addEventListener("click", function(event) {
-                addSorting(event, virtualcontainer);
+            // Category Name to Slug auto-generation
+            (function() {
+                var toTitleCase = function(str) { 
+                    return str.replace(/\b\w+/g, function(txt) { 
+                        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase(); 
+                    });
+                };
+                jQuery("#categoryName").off("input").on("input", function() {
+                    var titleString = toTitleCase(jQuery(this).val());
+                    var slugBase = titleString.toLowerCase().replace(/\s+/g, '-');
+                    jQuery("#slug").val(slugBase);
+                    jQuery(this).val(titleString);
+                });
+            })();
+        }
+        
+        function approveTask(id) {
+            if (!confirm('Are you sure you want to approve and apply these changes?')) return;
+            
+            $.ajax({
+                url: "{{ url('approve_pending_task') }}/" + id,
+                type: 'POST',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.success);
+                        window.location.href = "{{ route('show_pending_item') }}";
+                    } else {
+                        alert(response.error);
+                    }
+                },
+                error: function(err) {
+                    alert('Something went wrong.');
+                }
             });
         }
 
-        // Form submission handler moved to bottom of page for cache-busting
-        // See script tag after video_virtual.js include
-
-        $(document).on('click', '#parentCategoryInput', function() {
-            if ($('.parent-category-input').hasClass('show')) {
-                $('.parent-category-input').removeClass('show');
-            } else {
-                $(".parent-category-input").addClass('show');
-            }
-        });
-
-        $(document).on("click", ".category", function(event) {
-            $(".category").removeClass("selected");
-            $(".subcategory").removeClass("selected");
-            var id = $(this).data('id');
-            $("input[name='parent_category_id']").val(id);
-            $("#parentCategoryInput span").html($(this).data('catname'));
-            $('.parent-category-input').removeClass('show');
-            $(this).addClass("selected");
-        });
-
-        $(document).on("click", ".subcategory", function(event) {
-            event.stopPropagation();
-            $(".category").removeClass("selected");
-            $(".subcategory").removeClass("selected");
-            var id = $(this).data('id');
-            var parentId = $(this).data('pid');
-            $("input[name='parent_category_id']").val(id);
-            $('.parent-category-input').removeClass('show');
-            $("#parentCategoryInput span").html($(this).data('catname'));
-            $(this).addClass("selected");
-        });
-
-        $(document).on("click", "li.category.none-option", function() {
-            $("input[name='parent_category_id']").val("0");
-            $('.parent-category-input').removeClass('show');
-            $("#parentCategoryInput span").html('== none ==');
-        });
-
-        $(document).on('click', function(e) {
-            if (!$(e.target).closest('.form-group.category-dropbox-wrap').length) {
-                $('.custom-dropdown.parent-category-input.show').removeClass('show');
-            }
-        });
-
-        function updateCount(input, counterId) {
-            let max = 60; // default
-            if (counterId === 'metaCounter') max = 60;
-            if (counterId === 'h1Counter') max = 60;
-            if (counterId === 'metaDescCounter') max = 160;
-            if (counterId === 'shortDescCounter') max = 350;
-
-            const remaining = max - input.value.length;
-            const counterElement = document.getElementById(counterId);
-            if (counterElement) {
-                counterElement.textContent = remaining + ' remaining of ' + max + ' characters';
-            }
+        function openRejectModal(id) {
+            $('#reject_task_id').val(id);
+            $('#rejectModal').modal('show');
         }
 
-        // Set counts on page load for prefilled values
-        document.addEventListener("DOMContentLoaded", function() {
-            // Small delay to ensure DOM is fully loaded
-            setTimeout(function() {
-                const h1TagInput = document.getElementById('h1_tag');
-                if (h1TagInput) {
-                    updateCount(h1TagInput, 'h1Counter');
-                }
+        function rejectTask() {
+            let id = $('#reject_task_id').val();
+            let reason = $('#reject_reason').val();
+            
+            if (!reason) {
+                alert('Please enter a reason.');
+                return;
+            }
 
-                const metaTitleInput = document.getElementById('meta_title');
-                if (metaTitleInput) {
-                    updateCount(metaTitleInput, 'metaCounter');
+            $.ajax({
+                url: "{{ url('reject_pending_task') }}/" + id,
+                type: 'POST',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    reason: reason
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.success);
+                        window.location.href = "{{ route('show_pending_item') }}";
+                    } else {
+                        alert(response.error);
+                    }
+                },
+                error: function(err) {
+                    alert('Something went wrong.');
                 }
+            });
+        }
 
-                const metaDescTextarea = document.querySelector('textarea[name="meta_desc"]');
-                if (metaDescTextarea) {
-                    updateCount(metaDescTextarea, 'metaDescCounter');
-                }
-
-                const shortDescTextarea = document.querySelector('textarea[name="short_desc"]');
-                if (shortDescTextarea) {
-                    updateCount(shortDescTextarea, 'shortDescCounter');
-                }
-            }, 100);
-        });
-
-        // Backup initialization with jQuery
         $(document).ready(function() {
-            setTimeout(function() {
-                const h1TagInput = document.getElementById('h1_tag');
-                if (h1TagInput) {
-                    updateCount(h1TagInput, 'h1Counter');
-                }
-
-                const metaTitleInput = document.getElementById('meta_title');
-                if (metaTitleInput) {
-                    updateCount(metaTitleInput, 'metaCounter');
-                }
-
-                const metaDescTextarea = document.querySelector('textarea[name="meta_desc"]');
-                if (metaDescTextarea) {
-                    updateCount(metaDescTextarea, 'metaDescCounter');
-                }
-
-                const shortDescTextarea = document.querySelector('textarea[name="short_desc"]');
-                if (shortDescTextarea) {
-                    updateCount(shortDescTextarea, 'shortDescCounter');
-                }
-            }, 200);
+            if ("{{ request('preview') }}" == "1") {
+                $('input, textarea, select').prop('disabled', true);
+                $('.add-content-btn, .remove_block, .add_faq_btn, .remove_faq, .dynamic-file').hide();
+                $('.submit-btn').hide();
+                $('button:contains("Add Content"), button:contains("Add Faqs")').hide();
+                $('.btn-success:contains("Edit"), .btn-danger:contains("delete")').hide();
+                $('.btn-success:contains("Add tag"), .btn-danger:contains("Remove Content")').hide();
+                $('#parentCategoryInput').css('pointer-events', 'none').css('background-color', '#f8f9fa');
+                $('<style>')
+                    .prop('type', 'text/css')
+                    .html('.preview-mode { pointer-events: none; } .action-buttons, .action-buttons * { pointer-events: auto; } .preview-mode input:disabled, .preview-mode textarea:disabled, .preview-mode select:disabled { background-color: #f8f9fa !important; color: #6c757d !important; }')
+                    .appendTo('head');
+            }
         });
     </script>
-
-
-    </body>
-
-    </html>
-
-<script>
-// Define columns and sorting for video virtual categories - MUST be before video_virtual.js
-const columns = @json(config('videovirtualcolumns.columns', []));
-const sorting = @json(config('videovirtualcolumns.sorting', []));
-console.log('Columns and sorting defined:', { columns, sorting });
-</script>
-
-<script src="{{ asset('assets/js/video_virtual.js') }}?v={{ time() }}"></script>
-
-<script>
-// Form submission handler - Version {{ time() }}
-(function() {
-    // Remove any existing handlers
-    $('#dynamic_form').off('submit');
-
-    // Attach new handler
-    $('#dynamic_form').on('submit', function(event) {
-        event.preventDefault();
-
-        $.ajaxSetup({
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
-            }
-        });
-
-        var formData = new FormData(this);
-        formData.append('id', "{{ $datas['cat']->id }}");
-
-        // Use the correct update route
-        var url = "{{ url('update_video_virtual_cat', $datas['cat']->id) }}";
-
-        $.ajax({
-            url: url,
-            type: 'POST',
-            data: formData,
-            beforeSend: function() {
-                var main_loading_screen = document.getElementById("main_loading_screen");
-                if (main_loading_screen) {
-                    main_loading_screen.style.display = "block";
-                }
-            },
-            success: function(data) {
-                hideFields();
-                if (data.error) {
-                    window.alert(data.error);
-                } else {
-                    window.alert(data.success);
-                }
-                setTimeout(function() {
-                    $('#result').html('');
-                }, 3000);
-            },
-            error: function(error) {
-                hideFields();
-                window.alert(error.responseText);
-            },
-            cache: false,
-            contentType: false,
-            processData: false
-        });
-    });
-
-    function hideFields() {
-        var main_loading_screen = document.getElementById("main_loading_screen");
-        if (main_loading_screen) {
-            main_loading_screen.style.display = "none";
-        }
-    }
-})();
-
-// Category Name to Slug auto-generation - MUST be after video_virtual.js
-(function() {
-    const toTitleCase = str => str.replace(/\b\w+/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-
-    // Remove any existing handlers and attach new one
-    $("#categoryName").off("input").on("input", function() {
-        const titleString = toTitleCase($(this).val());
-        const slugBase = titleString.toLowerCase().replace(/\s+/g, '-');
-        $("#slug").val(slugBase); // Remove ID appending completely
-        $(this).val(titleString);
-    });
-
-    console.log('Category Name to Slug handler attached - ID appending removed');
-})();
-</script>
+</body>
+</html>

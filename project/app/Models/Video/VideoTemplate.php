@@ -151,6 +151,18 @@ class VideoTemplate extends Model
     {
         return $this->belongsTo(VideoCategory::class, 'category_id', 'id');
     }
+    public function getSlugAttribute($value): string
+    {
+        if (empty($value)) {
+            return "/templates/p/$this->string_id";
+        }
+        return "/" . ltrim($value, '/');
+    }
+
+    public function setSlugAttribute($value)
+    {
+        $this->attributes['slug'] = ltrim($value, '/');
+    }
 
     public function virtualCategory(): BelongsTo
     {

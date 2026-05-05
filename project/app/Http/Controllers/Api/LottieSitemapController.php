@@ -16,24 +16,43 @@ class LottieSitemapController extends ApiController
 
         $datas = VideoCategory::query()
             ->where('parent_category_id', 0)
+
             ->whereHas('videoTemplates', function ($q) {
-                $q->whereDoFrontLottie(1);
+                $q->whereTemplateType(0)
+                    ->whereStatus(1);
             })
+
             ->with([
                 'videoTemplates' => function ($q) {
-                    $q->whereDoFrontLottie(1);
+                    $q->whereTemplateType(0)
+                        ->whereStatus(1);
                 },
+
                 'subcategories' => function ($q) {
-                    $q->whereHas('videoTemplates', function ($t) {
-                        $t->whereDoFrontLottie(1);
-                    })->with([
-                        'videoTemplates' => function ($t) {
-                            $t->whereDoFrontLottie(1);
-                        }
-                    ]);
+                    $q->whereStatus(1)
+                        ->whereHas('videoTemplates', function ($t) {
+                            $t->whereTemplateType(0)
+                                ->whereStatus(1);
+                        })
+                        ->with([
+                            'videoTemplates' => function ($t) {
+                                $t->whereTemplateType(0)
+                                    ->whereStatus(1);
+                            },
+
+                            // ✅ also filter here (you missed this)
+                            'virtualPages' => function ($v) {
+                                $v->where('status', 1);
+                            }
+                        ]);
                 },
-                'virtualPages'
+
+                // ✅ main category virtualPages filter
+                'virtualPages' => function ($q) {
+                    $q->where('status', 1);
+                }
             ])
+
             ->orderBy('id')
             ->get();
 
@@ -80,6 +99,7 @@ class LottieSitemapController extends ApiController
         }
 
         $res['success'] = true;
+        $res['$datas'] = $datas;
         $res['datas'] = [
             'categories' => $catDatas,
         ];
@@ -95,10 +115,10 @@ class LottieSitemapController extends ApiController
             /*->whereStatus(1)*/
             ->where('parent_category_id', '>', 0)
             ->where(function ($q) {
-                $q->whereHas('videoTemplates', fn($t) => $t->/*whereStatus(1)->*/ whereDoFrontLottie(1));
+                $q->whereHas('videoTemplates', fn($t) => $t->/*whereStatus(1)->*/ whereTemplateType(0));
             })
             ->with([
-                'videoTemplates' => fn($t) => $t->/*whereStatus(1)->*/ whereDoFrontLottie(1),
+                'videoTemplates' => fn($t) => $t->/*whereStatus(1)->*/ whereTemplateType(0),
             ])->orderBy('id')
             ->get();
 

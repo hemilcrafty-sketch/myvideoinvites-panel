@@ -36,7 +36,7 @@
                                        <input type="text" class="form-control canonical_link"
                                            name="canonical_link" />
                                    </div>
-                                   <p class="text-end" style="font-size: 12px;">Only admin or fenil can modify canonical
+                                   <p class="text-end" style="font-size: 12px;">Only admin or SEO Manager can modify canonical
                                        link</p>
                                </div>
                            </div>
@@ -90,12 +90,7 @@
                            </div>
 
 
-                           <div class="col-md-6">
-                               <div class="form-group">
-                                   <h6>Tag Line</h6>
-                                   <input class="form-control" type="textname" name="tag_line" required>
-                               </div>
-                           </div>
+
                            <div class="col-md-6">
                                <div class="form-group">
                                    <h6>Meta Desc</h6>
@@ -160,12 +155,7 @@
 
                            </div>
                        </div>
-                       <div class="form-group">
-                           <h6>Banner</h6>
-                           <input type="file" accept=".jpg, .jpeg, .webp, .svg"
-                               class="form-control-file form-control height-auto dynamic-file"
-                               data-imgstore-id="banner" data-nameset="true">
-                       </div>
+
 
                        @include('partials.content_section', [
                            'contents' => old('contents'),
@@ -177,8 +167,8 @@
 
                        <div class="form-group">
                            <h6>Sequence Number</h6>
-                           <input class="form-control" type="textname" id="sequence_number" name="sequence_number"
-                               required>
+                            <input class="form-control" type="textname" id="sequence_number" name="sequence_number"
+                                value="{{ $nextSequenceNumber }}" required>
                        </div>
 
                        <div class="form-group">
@@ -364,18 +354,19 @@
            });
 
            function updateCount(input, counterId) {
-    let max = 60; // default
-    if (counterId === 'metaCounter') max = 60;
-    if (counterId === 'h1Counter') max = 60;
-    if (counterId === 'metaDescCounter') max = 160;
-    if (counterId === 'shortDescCounter') max = 350;
-
-    const remaining = max - input.value.length;
-    const counterElement = document.getElementById(counterId);
-    if (counterElement) {
-        counterElement.textContent = remaining + ' remaining of ' + max + ' characters';
-    }
-}
+               const limits = {
+                   'metaCounter': 60,
+                   'h1Counter': 60,
+                   'metaDescCounter': 160,
+                   'shortDescCounter': 350
+               };
+               const max = limits[counterId] || 60;
+               const remaining = max - input.value.length;
+               const counterElement = document.getElementById(counterId);
+               if (counterElement) {
+                   counterElement.textContent = remaining + ' remaining of ' + max + ' characters';
+               }
+           }
        </script>
 
 

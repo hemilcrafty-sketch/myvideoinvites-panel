@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Utils\ApiController;
 use App\Models\Revenue\MasterPurchaseHistory;
 use App\Models\Video\VideoCategory;
 use App\Models\Video\VideoTemplate;
+use App\Models\Video\VideoVirtualCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -20,6 +21,7 @@ class HelperController extends Controller
     public static int $cacheTimeOut = 3600;
     public static string $webPageUrl = "https://www.myvideoinvites.com/";
     public static string $mediaUrl = "https://media.myvideoinvites.com/";
+    public static string $videoFrontendUrl = "https://beta.myvideoinvites.com/";
 
     public static function getPaginationLimit(?int $size = null): int
     {
@@ -29,14 +31,17 @@ class HelperController extends Controller
     }
 
     public static function getVideoItemData(
-        VideoTemplate|stdClass $item,
+        VideoTemplate|stdClass|null $item,
         Collection $rates = null
-    ): array {
+    ): ?array {
+        if (!$item) {
+            return null;
+        }
 
         $payment = RateController::getVideoRates($rates, $item->pages);
         $category = $item->virtualCat ?? $item->videoCat;
 
-        return array(
+        return [
             'category_id' => $item->category_id,
             'category_name' => $category?->category_name,
             'category_title' => $category?->category_name ?? $category?->category_title,
@@ -55,7 +60,7 @@ class HelperController extends Controller
             'payment' => $payment,
             'template_link' => "$item->slug",
             'cat_link' => $category?->slug ?? "/templates/p/$item->string_id",
-        );
+        ];
     }
 
     public static function checkStringFormat($string, $convert = false): string
@@ -104,7 +109,7 @@ class HelperController extends Controller
         return $thumbArray;
     }
 
-    public static function generateID($prefix = '', $length = 10, bool $appendNumber = true, $stringType = "noraml"): string
+    public static function generateID($prefix = '', int $length = 10, bool $appendNumber = true, $stringType = "normal"): string
     {
         if ($appendNumber)
             $pool = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -129,7 +134,7 @@ class HelperController extends Controller
         };
     }
 
-    public static function generateRandomId($length = 10, $prefix = '', ?string $modelSource = null, $column = 'string_id', bool $appendNumber = false, $stringType = "normal"): string
+    public static function generateRandomId(int $length = 10, $prefix = '', ?string $modelSource = null, $column = 'string_id', bool $appendNumber = false, $stringType = "normal"): string
     {
 
         if ($modelSource && class_exists($modelSource)) {
@@ -168,7 +173,7 @@ class HelperController extends Controller
         $countryName = $location['country'];
         $currency = $location['currency'];
 
-        //        if ($request->isTester) {
+//        if ($request->isTester) {
 //            return ['ip' => $ipAddress, 'cc' => "US", 'cn' => "US", 'cur' => "USD"];
 //        }
 
@@ -329,7 +334,7 @@ class HelperController extends Controller
             return false;
         }
 
-        $jsonArray = json_decode($mainString, true);
+        $jsonArray = is_array($mainString) ? $mainString : json_decode($mainString, true);
 
         if (is_array($jsonArray)) {
             foreach ($jsonArray as $json) {
@@ -413,4 +418,153 @@ class HelperController extends Controller
         }
         return $ratingHtml;
     }
+    public static function getVCatName($id)
+    {
+        $res = VideoCategory::find($id);
+        if ($res != null) {
+            return $res->category_name;
+        }
+        return "";
+    }
+    public static function generateFolderID($id, $length = 10)
+    {
+        $pool = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        return $id . substr(str_shuffle(str_repeat($pool, $length)), 0, $length);
+    }
+
+     public static function getVideoFrontendPageUrlById(int $type, $id): string
+    {
+        $base = self::getVideoFrontendBaseUrl();
+
+        $urlFromCanonical = static function (?string $canonical) use ($base): ?string {
+            if (empty($canonical) || !str_starts_with($canonical, 'http')) {
+                return null;
+            }
+            $path = parse_url($canonical, PHP_URL_PATH);
+            if ($path === null || $path === '' || $path === '/') {
+                return null;
+            }
+            $query = parse_url($canonical, PHP_URL_QUERY);
+            $built = rtrim($base, '/') . $path;
+            if (!empty($query)) {
+                $built .= '?' . $query;
+            }
+
+            return $built;
+        };
+
+        if ($type === 6) {
+            $data = VideoCategory::query()
+                ->where(function ($q) use ($id) {
+                    $q->where('string_id', $id);
+                    if ($id !== '' && $id !== null && ctype_digit((string) $id)) {
+                        $q->orWhere('id', (int) $id);
+                    }
+                })
+                ->first();
+            if (!$data) {
+                return $base;
+            }
+            $fromCanon = $urlFromCanonical($data->canonical_link ?? null);
+            if ($fromCanon !== null) {
+                return $fromCanon;
+            }
+            $path = $data->slug;
+
+            return rtrim($base, '/') . '/' . ltrim((string) $path, '/');
+        }
+
+        if ($type === 7) {
+            $data = VideoVirtualCategory::query()
+                ->where(function ($q) use ($id) {
+                    $q->where('string_id', $id);
+                    if ($id !== '' && $id !== null && ctype_digit((string) $id)) {
+                        $q->orWhere('id', (int) $id);
+                    }
+                })
+                ->first();
+            if (!$data) {
+                return $base;
+            }
+            $fromCanon = $urlFromCanonical($data->canonical_link ?? null);
+            if ($fromCanon !== null) {
+                return $fromCanon;
+            }
+            $path = $data->slug;
+
+            return rtrim($base, '/') . '/' . ltrim((string) $path, '/');
+        }
+
+        if ($type === 8) {
+            $data = VideoTemplate::query()
+                ->where(function ($q) use ($id) {
+                    $q->where('string_id', $id);
+                    if ($id !== '' && $id !== null && ctype_digit((string) $id)) {
+                        $q->orWhere('id', (int) $id);
+                    }
+                })
+                ->first();
+            if (!$data) {
+                return $base;
+            }
+            $slug = $data->slug;
+            if ($slug === null || $slug === '') {
+                return $base;
+            }
+            $slug = ltrim((string) $slug, '/');
+
+            $fromCanon = $urlFromCanonical($data->canonical_link ?? null);
+            if ($fromCanon !== null) {
+                return $fromCanon;
+            }
+
+            return rtrim($base, '/') . '/templates/p/' . $slug;
+        }
+
+        return $base;
+    }
+
+   public static function getVideoFrontendBaseUrl(): string
+    {
+        $url = trim((string) self::$videoFrontendUrl);
+
+        if ($url === '') {
+            $url = 'https://beta.myvideoinvites.com/';
+        }
+
+        return rtrim($url, '/') . '/';
+    }
+        public static function getPageValueByStringId($type, $stringID): string
+    {
+        $type = (int) $type;
+
+        return match ($type) {
+                      1 => VideoCategory::query()
+                ->where(function ($q) use ($stringID) {
+                    $q->where('slug', $stringID)->orWhere('string_id', $stringID);
+                    if ($stringID !== '' && $stringID !== null && ctype_digit((string) $stringID)) {
+                        $q->orWhere('id', (int) $stringID);
+                    }
+                })
+                ->value('category_name') ?? 'Not Found',
+            2 => VideoVirtualCategory::query()
+                ->where(function ($q) use ($stringID) {
+                    $q->where('slug', $stringID)->orWhere('string_id', $stringID);
+                    if ($stringID !== '' && $stringID !== null && ctype_digit((string) $stringID)) {
+                        $q->orWhere('id', (int) $stringID);
+                    }
+                })
+                ->value('category_name') ?? 'Not Found',
+            3 => VideoTemplate::query()
+                ->where(function ($q) use ($stringID) {
+                    $q->where('string_id', $stringID)->orWhere('slug', $stringID);
+                    if ($stringID !== '' && $stringID !== null && ctype_digit((string) $stringID)) {
+                        $q->orWhere('id', (int) $stringID);
+                    }
+                })
+                ->value('video_name') ?? 'Not Found',
+            default => 'Not Found',
+        };
+    }
+
 }

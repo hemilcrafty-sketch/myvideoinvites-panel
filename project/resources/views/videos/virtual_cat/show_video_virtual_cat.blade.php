@@ -1,8 +1,9 @@
- @inject('roleManager', 'App\Http\Controllers\Utils\RoleManager')
- @inject('contentManager', '\App\Http\Controllers\Admin\Utils\ContentManager')
- @inject('helperController', 'App\Http\Controllers\Utils\HelperController')
- @include('layouts.masterhead')
- <div class="main-container">
+@inject('roleManager', 'App\Http\Controllers\Utils\RoleManager')
+@inject('contentManager', '\App\Http\Controllers\Admin\Utils\ContentManager')
+@inject('helperController', 'App\Http\Controllers\Utils\HelperController')
+@include('layouts.masterhead')
+
+<div class="main-container">
 
      <div class="pd-ltr-20 xs-pd-20-10">
          <div class="min-height-200px">
@@ -10,7 +11,7 @@
                  <div style="display: flex; flex-direction: column; height: 90vh; overflow: hidden;">
                      <div class="row justify-content-between">
                          <div class="col-md-3 m-1">
-                             @if ($roleManager::onlySeoAccess(Auth::user()->user_type) && !$roleManager::isSeoManager(Auth::user()->user_type))
+                             @if ($roleManager::onlySeoAccess(Auth::user()->user_type))
                                  <a class="btn btn-primary item-form-input" href="create_video_virtual_cat" role="button"> Add
                                      New
                                      Video Category </a>
@@ -19,9 +20,9 @@
 
                          <div class="col-md-7">
                              @include('partials.filter_form ', [
-                                 'action' => route('show_video_virtual_cat'),
-                                 'filterExtraNoIndex' => true,
-                             ])
+                                'action' => route('show_video_virtual_cat'),
+                                'filterExtraNoIndex' => true,
+                            ])
                          </div>
                      </div>
 

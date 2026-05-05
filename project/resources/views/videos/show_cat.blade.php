@@ -234,7 +234,10 @@
                             <tr>
                                 <td class="id-cell">#{{ $cat->id }}</td>
                                 <td>{{ $roleManager::getUploaderName($cat->emp_id) }}</td>
-                                <td>{{ $cat->category_name }}</td>
+                                <td>
+                                    {{ $cat->category_name }}
+                                    <span class="d-block text-primary" style="font-size: 11px;">{{ $cat->slug }}</span>
+                                </td>
                                 <td>{{ $helperController::getParentVideoCatName($cat->parent_category_id, true) }}</td>
                                 <td class="cat-thumb-cell">
                                     @if($cat->category_thumb && !str_contains($cat->category_thumb, 'no_image'))

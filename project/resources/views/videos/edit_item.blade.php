@@ -248,7 +248,7 @@
                         <h6>Video Thumb</h6>
                         <input type="file" id="video_thumb" class="form-control-file form-control height-auto"
                             name="video_thumb" accept=".webp">
-                        <small class="text-muted">Only WebP format, max 100 KB</small>
+                        <small class="text-muted">Only WebP format, max 50 KB</small>
                         @if($dataArray['item']->video_thumb)
                             <div style="margin-top: 10px;">
                                 <img src="{{ config('filesystems.storage_url') }}{{ $dataArray['item']->video_thumb }}"
@@ -552,6 +552,15 @@
                         </div>
                     </div>
 
+                    <div class="pd-20 card-box mb-30" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px;">
+                        <h6 style="color: #0059b2; margin-bottom: 15px;"><i class="fa fa-search"></i> SEO Configuration</h6>
+                        @include('videos.partials.sitemap_seo_fields', [
+                            'no_index' => $dataArray['item']->no_index ?? 1,
+                            'priority' => $dataArray['item']->priority ?? 0.90,
+                            'frequency' => $dataArray['item']->frequency ?? 'daily',
+                        ])
+                    </div>
+
                     <div class="action-buttons">
                         <button type="submit" class="btn btn-primary" id="submitBtn" name="submit">
                             <i class="fa fa-save"></i> Update Video
@@ -587,10 +596,10 @@
                     return;
                 }
 
-                // Validate file size (100 KB = 100 * 1024 bytes)
-                const maxSize = 100 * 1024; // 100 KB
+                // Validate file size (50 KB = 50 * 1024 bytes)
+                const maxSize = 50 * 1024; // 50 KB
                 if (file.size > maxSize) {
-                    alert('Video Thumb size must be less than 100 KB! Current size: ' + (file.size / 1024).toFixed(2) + ' KB');
+                    alert('Video Thumb size must be less than 50 KB! Current size: ' + (file.size / 1024).toFixed(2) + ' KB');
                     $(this).val('');
                     return;
                 }

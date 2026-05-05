@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin\Video;
 
+use App\Http\Controllers\Admin\PendingTaskController;
 use App\Http\Controllers\Admin\AppBaseController;
 use App\Http\Controllers\Admin\Utils\ContentManager;
 use App\Http\Controllers\Utils\HelperController;
@@ -29,7 +30,8 @@ class VideoCatController extends AppBaseController
     {
         $allCategories = VideoCategory::getAllCategoriesWithSubcategories();
         $userRole = User::where('user_type', 5)->get();
-        return view('videos/create_cat', compact('allCategories', 'userRole'));
+        $nextSequenceNumber = (VideoCategory::max('sequence_number') ?? 0) + 1;
+        return view('videos/create_cat', compact('allCategories', 'userRole', 'nextSequenceNumber'));
     }
 
     public function store(Request $request): JsonResponse
@@ -50,11 +52,20 @@ class VideoCatController extends AppBaseController
                 ]);
             }
 
-            // Validate character limits for meta_desc and short_desc
-            $request->validate([
+            // Validate character limits and unique sequence number
+            $validator = Validator::make($request->all(), [
                 'meta_desc' => 'nullable|string|max:160',
                 'short_desc' => 'nullable|string|max:350',
+                'sequence_number' => 'required|unique:main_categories,sequence_number',
+            ], [
+                'sequence_number.unique' => 'this sequence_number is alrady assign so plz chnage it',
             ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => $validator->errors()->first()
+                ]);
+            }
 
             $res = new VideoCategory;
 
@@ -74,7 +85,7 @@ class VideoCatController extends AppBaseController
                 }
             }
 
-            $res->slug = $request->input('slug');
+            $res->slug = ltrim($request->input('slug'), '/');
             $res->canonical_link = $request->input('canonical_link');
 
             // Validate canonical link for video categories
@@ -201,10 +212,17 @@ class VideoCatController extends AppBaseController
             $res->emp_id = auth()->user()->id;
 
             $this->applyVideoSitemapFieldsFromRequest($request, $res, true);
-            $res->save();
-            return response()->json([
-                'success' => 'Category Added successfully.'
-            ]);
+            return PendingTaskController::store(
+                $res,
+                VideoCategory::class,
+                'Video Category',
+                'Video Category Add',
+                "v_cat",
+                'add',
+                route('edit_v_cat', ['id' => 0]),
+                RoleManager::isAdminOrSeoManager(auth()->user()->user_type),
+                $res->category_name
+            );
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
@@ -217,6 +235,7 @@ class VideoCatController extends AppBaseController
         $searchableFields = [
             ['id' => 'id', 'value' => 'ID'],
             ['id' => 'category_name', 'value' => 'Category Name'],
+            ['id' => 'slug', 'value' => 'Slug'],
             ['id' => 'sequence_number', 'value' => 'Sequence Number'],
             ['id' => 'no_index', 'value' => 'No Index'],
             ['id' => 'status', 'value' => 'Status'],
@@ -233,6 +252,7 @@ class VideoCatController extends AppBaseController
             $query->where(function ($q) use ($searchQuery) {
                 $q->where('id', 'like', '%' . $searchQuery . '%')
                     ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('slug', 'like', '%' . $searchQuery . '%')
                     ->orWhere('sequence_number', 'like', '%' . $searchQuery . '%');
             });
         }
@@ -272,13 +292,50 @@ class VideoCatController extends AppBaseController
         return view('videos.show_cat', compact('catArray', 'searchableFields', 'noIndexStats'));
     }
 
-    public function edit($id): Factory|View|Application
+    public function edit($id, Request $request): Factory|View|Application
     {
-        $cat = VideoCategory::findOrFail($id);
+        $isPreview = $request->query('preview');
+        $datas = [];
 
-        // Load contents and faqs from JSON files
-        $cat->contents = isset($cat->contents) ? StorageUtils::get($cat->contents) : "";
-        $cat->faqs = isset($cat->faqs) ? StorageUtils::get($cat->faqs) : "";
+        if ($id == 0 && $isPreview) {
+            $cat = new VideoCategory();
+            $cat->id = 0;
+        } else {
+            $cat = VideoCategory::findOrFail($id);
+        }
+
+        if ($isPreview) {
+            $pendingTask = \App\Models\PendingTask::where('table_name', 'v_cat')
+                ->where(function($q) use ($id) {
+                    if ($id == 0) {
+                        $q->whereNull('record_id')->orWhere('record_id', 0);
+                    } else {
+                        $q->where('record_id', $id);
+                    }
+                })
+                ->where('status', 0)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($pendingTask) {
+                $data = json_decode($pendingTask->data, true);
+                $cat->fill($data);
+                $datas['pendingTask'] = $pendingTask;
+            }
+        }
+
+        // Load contents and faqs from JSON files (with safety)
+        try {
+            $cat->contents = (isset($cat->contents) && $cat->contents != "") ? StorageUtils::get($cat->contents) : "";
+        } catch (\Exception $e) {
+            $cat->contents = "";
+        }
+
+        try {
+            $cat->faqs = (isset($cat->faqs) && $cat->faqs != "") ? StorageUtils::get($cat->faqs) : "";
+        } catch (\Exception $e) {
+            $cat->faqs = "";
+        }
 
         $datas['cat'] = $cat;
         $datas['allCategories'] = VideoCategory::getAllCategoriesWithSubcategories();
@@ -298,6 +355,18 @@ class VideoCatController extends AppBaseController
 
         // Get SEO employee IDs for access check
         $seoEmpIds = $res->seo_emp_id ?? '';
+
+        $validator = Validator::make($request->all(), [
+            'sequence_number' => 'required|unique:main_categories,sequence_number,' . $request->id,
+        ], [
+            'sequence_number.unique' => 'this sequence_number is alrady assign so plz chnage it',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => $validator->errors()->first()
+            ]);
+        }
 
         $slugError = VideoSlugHistory::checkSlugValidation($request->input('slug'), $request->id);
         if ($slugError) {
@@ -338,7 +407,7 @@ class VideoCatController extends AppBaseController
             }
         }
 
-        $res->slug = $request->input('slug');
+        $res->slug = ltrim($request->input('slug'), '/');
         $res->canonical_link = $request->input('canonical_link');
 
         // Validate canonical link for video categories
@@ -483,12 +552,13 @@ class VideoCatController extends AppBaseController
             StorageUtils::put($contentPath, $contents);
             $res->contents = $contentPath;
 
-            // Delete old content file if exists and is different
-            if ($oldContentPath && $oldContentPath != $contentPath && !filter_var($oldContentPath, FILTER_VALIDATE_URL)) {
-                try {
-                    StorageUtils::delete($oldContentPath);
-                } catch (\Exception $e) {
-                    // Ignore if file doesn't exist
+            // Delete old content file if exists and is different (ONLY for direct save)
+            if (RoleManager::isAdminOrSeoManager(auth()->user()->user_type)) {
+                if ($oldContentPath && $oldContentPath != $contentPath && !filter_var($oldContentPath, FILTER_VALIDATE_URL)) {
+                    try {
+                        StorageUtils::delete($oldContentPath);
+                    } catch (\Exception $e) {
+                    }
                 }
             }
         }
@@ -502,12 +572,13 @@ class VideoCatController extends AppBaseController
             StorageUtils::put($faqPath, json_encode($faqs));
             $res->faqs = $faqPath;
 
-            // Delete old faq file if exists and is different
-            if ($oldFaqPath && $oldFaqPath != $faqPath && !filter_var($oldFaqPath, FILTER_VALIDATE_URL)) {
-                try {
-                    StorageUtils::delete($oldFaqPath);
-                } catch (\Exception $e) {
-                    // Ignore if file doesn't exist
+            // Delete old faq file if exists and is different (ONLY for direct save)
+            if (RoleManager::isAdminOrSeoManager(auth()->user()->user_type)) {
+                if ($oldFaqPath && $oldFaqPath != $faqPath && !filter_var($oldFaqPath, FILTER_VALIDATE_URL)) {
+                    try {
+                        StorageUtils::delete($oldFaqPath);
+                    } catch (\Exception $e) {
+                    }
                 }
             }
         }
@@ -522,14 +593,19 @@ class VideoCatController extends AppBaseController
         $res->parent_category_id = $request->input('parent_category_id', 0);
         $res->status = $request->input('status');
         $this->applyVideoSitemapFieldsFromRequest($request, $res, false);
-        $res->save();
+        $previewRoute = route('edit_v_cat', ['id' => $res->id ?? 0]);
 
-        // AJAX response
-        if ($request->ajax()) {
-            return response()->json(['success' => true, 'message' => 'Category updated successfully.']);
-        }
-
-        return redirect()->route('show_v_cat')->with('success', 'Category updated successfully.');
+        return PendingTaskController::store(
+            $res,
+            VideoCategory::class,
+            'Video Category',
+            'Video Category Update',
+            "v_cat",
+            'update',
+            $previewRoute,
+            RoleManager::isAdminOrSeoManager(auth()->user()->user_type),
+            $res->category_name
+        );
     }
 
     public function destroy($id): Redirector|Application|RedirectResponse

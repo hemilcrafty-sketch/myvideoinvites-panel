@@ -208,6 +208,11 @@
                         </div>
                     </div>
                 </div>
+                @include('videos.partials.sitemap_seo_fields', [
+                    'no_index' => $dataArray['item']->no_index ?? 1,
+                    'priority' => $dataArray['item']->priority ?? 0.90,
+                    'frequency' => $dataArray['item']->frequency ?? 'daily',
+                ])
                 <div class="row">
 
                     <div class="col-md-4 col-sm-12">
@@ -255,7 +260,8 @@
                         <div class="form-group">
                             <h6>Meta Description</h6>
                             <div class="col-sm-20">
-                                <textarea style="height: 250px" class="form-control" id="meta_description" name="meta_description" maxlength="160">{{ $dataArray['item']->meta_description }}</textarea>
+                                <textarea style="height: 250px" class="form-control" id="meta_description" name="meta_description" maxlength="160" oninput="updateCount(this, 'metaDescCounter')">{{ $dataArray['item']->meta_description }}</textarea>
+                                <small id="metaDescCounter" class="text-muted"></small>
                             </div>
                         </div>
                     </div>
@@ -1705,30 +1711,41 @@
     });
 
     function updateCount(input, counterId) {
-        const max = 60;
+        if (!input) return;
+        const max = parseInt(input.getAttribute('maxlength')) || 60;
         const remaining = max - input.value.length;
-        document.getElementById(counterId).textContent =
-            remaining + ' remaining of ' + max + ' letters';
+        const counterElement = document.getElementById(counterId);
+        if (counterElement) {
+            counterElement.textContent = remaining + ' remaining of ' + max + ' letters';
+        }
     }
 
-    // set count for pre-filled values
-    document.addEventListener("DOMContentLoaded", function() {
-        updateCount(document.getElementById('meta_title'), 'metaCounter');
-    });
+    // Initialize character counters on page load
+    $(document).ready(function() {
+        const initCounters = () => {
+            const fields = [
+                { id: 'post_name', counter: 'postNameCounter' },
+                { id: 'meta_title', counter: 'metaCounter' },
+                { id: 'meta_description', counter: 'metaDescCounter' }
+            ];
 
-    function updateCount(input, counterId) {
-        const max = parseInt(input.getAttribute('maxlength')) || 50;
-        const remaining = max - input.value.length;
-        document.getElementById(counterId).textContent =
-            remaining + ' remaining of ' + max + ' letters';
-    }
+            fields.forEach(field => {
+                const el = document.getElementById(field.id);
+                if (el) {
+                    updateCount(el, field.counter);
+                    // Add listener if not already present via oninput
+                    if (field.id === 'post_name') {
+                        el.addEventListener('input', function() {
+                            updateCount(el, field.counter);
+                        });
+                    }
+                }
+            });
+        };
 
-    document.addEventListener("DOMContentLoaded", function() {
-        const input = document.getElementById('post_name');
-        updateCount(input, 'postNameCounter'); // initial count
-        input.addEventListener('input', function() {
-            updateCount(input, 'postNameCounter');
-        });
+        initCounters();
+        setTimeout(initCounters, 100);
+        setTimeout(initCounters, 500);
     });
 </script>
 

@@ -156,7 +156,15 @@ class VideoCategory extends Model
     {
         return $this->hasMany(VideoVirtualCategory::class, 'parent_category_id', 'id');
     }
+    public function getSlugAttribute($value): string
+    {
+        return '/' . ltrim($value, '/');
+    }
 
+    public function setSlugAttribute($value)
+    {
+        $this->attributes['slug'] = ltrim($value, '/');
+    }
     /**
      * Root main_categories id for size/theme filters (parity with NewCategory::getRootParentId).
      */
@@ -350,19 +358,18 @@ class VideoCategory extends Model
      */
     public static function findId(
         ?array $select = [],
-        ?int   $isStatus = null,
-        ?int   $id = null,
-        ?int   $parentId = null,
-        ?bool  $getChild = true
-    ): ?VideoCategory
-    {
+        ?int $isStatus = null,
+        ?int $id = null,
+        ?int $parentId = null,
+        ?bool $getChild = true
+    ): ?VideoCategory {
         $cacheKey = 'vi_categories_id_' . md5(json_encode([
-                'select' => $select,
-                'status' => $isStatus,
-                'id' => $id,
-                'parentId' => $parentId,
-                'getChild' => $getChild,
-            ]));
+            'select' => $select,
+            'status' => $isStatus,
+            'id' => $id,
+            'parentId' => $parentId,
+            'getChild' => $getChild,
+        ]));
 
         $callback = function () use ($select, $isStatus, $id, $parentId, $getChild) {
 
@@ -370,18 +377,23 @@ class VideoCategory extends Model
 
             $query = VideoCategory::query()->when($select, fn($q) => $q->select($select));
             $query->whereId($id);
-            if ($parentId !== null) $query->whereParentCategoryId($parentId);
-            if ($isStatus !== null) $query->whereStatus($isStatus);
+            if ($parentId !== null)
+                $query->whereParentCategoryId($parentId);
+            if ($isStatus !== null)
+                $query->whereStatus($isStatus);
             $query->where('total_templates', '>', 0);
 
             /** @var VideoCategory $category */
             $category = $query->first();
 
-            if (!$category) return null;
-            if (!$getChild) return $category;
+            if (!$category)
+                return null;
+            if (!$getChild)
+                return $category;
 
             $parentCat = null;
-            if ($category->parent_category_id != 0) $parentCat = VideoCategory::find($category->parent_category_id);
+            if ($category->parent_category_id != 0)
+                $parentCat = VideoCategory::find($category->parent_category_id);
 
             $buildTree = self::getChilds(isStatus: $isStatus, parentCat: $parentCat, select: $select);
 
@@ -403,39 +415,43 @@ class VideoCategory extends Model
      * @return VideoCategory|null Returns an associative array based on `VideoCategory` model with tree data, or null if not found.
      */
     public static function findBySlug(
-        ?array  $select = [],
-        ?int    $isStatus = null,
+        ?array $select = [],
+        ?int $isStatus = null,
         ?string $id = null,
-        ?int    $parentId = null,
-        ?bool   $getChild = true
-    ): ?VideoCategory
-    {
+        ?int $parentId = null,
+        ?bool $getChild = true
+    ): ?VideoCategory {
 
         $cacheKey = 'vi_categories_slug_' . md5(json_encode([
-                'select' => $select,
-                'status' => $isStatus,
-                'id' => $id,
-                'parentId' => $parentId,
-                'getChild' => $getChild,
-            ]));
+            'select' => $select,
+            'status' => $isStatus,
+            'id' => $id,
+            'parentId' => $parentId,
+            'getChild' => $getChild,
+        ]));
 
         $callback = function () use ($select, $isStatus, $id, $parentId, $getChild) {
             $select = self::resolveSelect($select);
 
             $query = VideoCategory::query()->when($select, fn($q) => $q->select($select));
             $query->whereSlug($id);
-            if ($parentId !== null) $query->whereParentCategoryId($parentId);
-            if ($isStatus !== null) $query->whereStatus($isStatus);
+            if ($parentId !== null)
+                $query->whereParentCategoryId($parentId);
+            if ($isStatus !== null)
+                $query->whereStatus($isStatus);
             $query->where('total_templates', '>', 0);
 
             /** @var VideoCategory $category */
             $category = $query->first();
 
-            if (!$category) return null;
-            if (!$getChild) return $category;
+            if (!$category)
+                return null;
+            if (!$getChild)
+                return $category;
 
             $parentCat = null;
-            if ($category->parent_category_id != 0) $parentCat = VideoCategory::find($category->parent_category_id);
+            if ($category->parent_category_id != 0)
+                $parentCat = VideoCategory::find($category->parent_category_id);
 
             $buildTree = self::getChilds(isStatus: $isStatus, parentCat: $parentCat, select: $select);
 
@@ -456,16 +472,16 @@ class VideoCategory extends Model
     public static function getAllCatsWithChilds(
         ?array $select = [],
         ?array $filters = [],
-        int    $limit = 10,
-        ?int   $page = null): LengthAwarePaginator
-    {
+        int $limit = 10,
+        ?int $page = null
+    ): LengthAwarePaginator {
 
         $cacheKey = 'categories_with_childs_' . md5(json_encode([
-                'select' => $select,
-                'filters' => $filters,
-                'limit' => $limit,
-                'page' => $page,
-            ]));
+            'select' => $select,
+            'filters' => $filters,
+            'limit' => $limit,
+            'page' => $page,
+        ]));
 
         $callback = function () use ($select, $filters, $limit, $page) {
             $select = self::resolveSelect($select);
@@ -517,18 +533,20 @@ class VideoCategory extends Model
 
     public static function getParentCategories(
         ?array $select = [],
-        ?int   $isStatus = null,
-        ?int   $isImp = null,
-        int    $limit = 10,
-        ?int   $page = null): LengthAwarePaginator
-    {
+        ?int $isStatus = null,
+        ?int $isImp = null,
+        int $limit = 10,
+        ?int $page = null
+    ): LengthAwarePaginator {
 
         $select = self::resolveSelect($select);
 
         $query = VideoCategory::query()->when($select, fn($q) => $q->select($select))->where('parent_category_id', 0);
 
-        if ($isStatus !== null) $query->whereStatus($isStatus);
-        if ($isImp !== null) $query->whereImp($isImp);
+        if ($isStatus !== null)
+            $query->whereStatus($isStatus);
+        if ($isImp !== null)
+            $query->whereImp($isImp);
 
         $query->where('total_templates', '>', 0);
         $query->orderBy('sequence_number', 'ASC');
@@ -555,8 +573,10 @@ class VideoCategory extends Model
 
     private static function resolveSelect(?array $select): ?array
     {
-        if ($select === null) return self::$defaultCategorySelect;
-        if (count($select) === 0) return null;
+        if ($select === null)
+            return self::$defaultCategorySelect;
+        if (count($select) === 0)
+            return null;
         return $select;
     }
 
@@ -572,10 +592,13 @@ class VideoCategory extends Model
     {
         $childQuery = VideoCategory::query()->when($select, fn($q) => $q->select($select));
 
-        if ($parentCat !== null) $childQuery->whereParentCategoryId($parentCat->id);
-        elseif ($parentIds !== null) $childQuery->whereIn('parent_category_id', $parentIds);
+        if ($parentCat !== null)
+            $childQuery->whereParentCategoryId($parentCat->id);
+        elseif ($parentIds !== null)
+            $childQuery->whereIn('parent_category_id', $parentIds);
 
-        if ($isStatus !== null) $childQuery->whereStatus($isStatus);
+        if ($isStatus !== null)
+            $childQuery->whereStatus($isStatus);
 
         $childQuery->where('total_templates', '>', 0);
 
