@@ -22,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Exception;
 use Cache;
+use Illuminate\Support\Facades\Log;
 
 class LottieApiController extends ApiController
 {
@@ -38,115 +39,120 @@ class LottieApiController extends ApiController
     function getCategories(Request $request): array|string
     {
 
-        if ($this->isFakeRequest($request)) return $this->failed(msg: "Unauthorized");
+        if ($this->isFakeRequest($request))
+            return $this->failed(msg: "Unauthorized");
 
-        $page = (int) $request->has('page') ? $request->get('page') : 1;
+        try {
+            $page = (int) $request->has('page') ? $request->get('page') : 1;
 
-        $limit = 12;
+            $limit = 12;
 
-        $rates = RateController::getRates();
+            $rates = RateController::getRates();
 
-        $datas = VideoCategory::query()
-            ->whereStatus(1)
-            ->where('parent_category_id', '>', 0)
-            ->where(function ($q) {
-                $q->whereHas('videoTemplates', fn($t) => $t->whereStatus(1)->whereTemplateType(0)->whereIsDeleted(0));
-            })
-            ->with([
-                'videoTemplates' => fn($t) => $t->whereStatus(1)->whereTemplateType(0)->whereIsDeleted(0)->with(['videoCat', 'virtualCat'])->orderBy('id', 'desc'),
-            ])->orderBy('sequence_number', 'asc')
-            ->paginate($limit, ['*'], 'page', $page);
+            $datas = VideoCategory::query()
+                ->whereStatus(1)
+                ->where('parent_category_id', '>', 0)
+                ->where(function ($q) {
+                    $q->whereHas('videoTemplates', fn($t) => $t->whereStatus(1)->whereTemplateType(0)->whereIsDeleted(0));
+                })
+                ->with([
+                    'videoTemplates' => fn($t) => $t->whereStatus(1)->whereTemplateType(0)->whereIsDeleted(0)->with(['videoCat', 'virtualCat'])->orderBy('id', 'desc'),
+                ])->orderBy('sequence_number', 'asc')
+                ->paginate($limit, ['*'], 'page', $page);
 
-        $datas->getCollection()->transform(function ($category) {
-            /** @var VideoCategory $category */
-            // Parent templates
-            $parentTemplates = $category->videoTemplates;
+            $datas->getCollection()->transform(function ($category) {
+                /** @var VideoCategory $category */
+                // Parent templates
+                $parentTemplates = $category->videoTemplates;
 
-            // Subcategory templates (flattened)
-            $subTemplates = $category->subcategories->flatMap(fn($sub) => $sub->videoTemplates);
+                // Subcategory templates (flattened)
+                $subTemplates = $category->subcategories->flatMap(fn($sub) => $sub->videoTemplates);
 
-            // Merge + remove duplicates (by id)
-            $category->templates = $parentTemplates
-                ->merge($subTemplates)
-                ->unique('id')
-                ->sortByDesc('id')
-                ->take(12)
-                ->values();
+                // Merge + remove duplicates (by id)
+                $category->templates = $parentTemplates
+                    ->merge($subTemplates)
+                    ->unique('id')
+                    ->sortByDesc('id')
+                    ->take(12)
+                    ->values();
 
-            $category->makeHidden([
-                'videoTemplates',
-                'subcategories'
-            ]);
+                $category->makeHidden([
+                    'videoTemplates',
+                    'subcategories'
+                ]);
 
-            return $category;
-        });
+                return $category;
+            });
 
-        $categories = [];
+            $categories = [];
 
-        foreach ($datas->items() as $data) {
-            /** @var VideoCategory $data */
+            foreach ($datas->items() as $data) {
+                /** @var VideoCategory $data */
 
-            $templateDatas = [];
-            foreach ($data->templates as $row) {
-                /** @var VideoTemplate $row */
-                $templateDatas[] = HelperController::getVideoItemData(item: $row, rates: $rates);
+                $templateDatas = [];
+                foreach ($data->templates as $row) {
+                    /** @var VideoTemplate $row */
+                    $templateDatas[] = HelperController::getVideoItemData(item: $row, rates: $rates);
+                }
+
+                $categories[] = [
+                    'category_id' => $data->id,
+                    'category_name' => $data->category_name,
+                    'category_title' => $data->category_title,
+                    'category_thumb' => HelperController::$mediaUrl . $data->category_thumb,
+                    'category_mockup' => null,
+                    'link' => $data->slug,
+                    'total_templates' => $data->total_templates,
+                    'templates' => $templateDatas
+                ];
             }
 
-            $categories[] = [
-                'category_id' => $data->id,
-                'category_name' => $data->category_name,
-                'category_title' => $data->category_title,
-                'category_thumb' => HelperController::$mediaUrl . $data->category_thumb,
-                'category_mockup' => null,
-                'link' => $data->slug,
-                'total_templates' => $data->total_templates,
-                'templates' => $templateDatas
+            $response = [
+                'category_hierarchy' => self::getSubCategories(null, true),
+                'data' => $categories,
+                "pagination" => PaginationController::getPagination($datas),
+                "seo" => self::$templateSeo,
             ];
+
+            $data = PReviewController::getPReviews("", 1, "15vODGdC", 1);
+            if ($data['success']) {
+                $response['reviews'] = $data['data'];
+            }
+
+            $response['faqs'] = [
+                "title" => "Frequently Asked Questions (FAQs)",
+                "data" => [
+                    [
+                        "question" => "1. What is a Video Invitation?",
+                        "answer" => "A video invitation is a digital way to invite people to an event, using a video format rather than traditional paper invitations. It allows you to add creativity, sound, and visual elements, making your invitation more personal and engaging."
+                    ],
+                    [
+                        "question" => "2. How do I Create a Video Invitation?",
+                        "answer" => "You can easily create a video invitation using our website. Simply choose your preferred design, add event details, and customize the video with images, text, and music. Once you're satisfied, download the video and share it!"
+                    ],
+                    [
+                        "question" => "3. What are the benefits of creating invitation videos?",
+                        "answer" => "Creating invitation videos gives you a modern, creative, and customizable way to invite guests to your event. You can add music, photos, text, and personal touches to make your invitation stand out."
+                    ],
+                    [
+                        "question" => "4. How do I share my invitation video?",
+                        "answer" => "Once you’ve created your digital invite video, you can share it across multiple platforms like WhatsApp, email, or social media. It’s as simple as downloading the video and sending it to your guests!"
+                    ],
+                    [
+                        "question" => "5. Can I create a video invitation for an event?",
+                        "answer" => "Yes, you can create a video invitation for any type of event, from weddings to birthdays, corporate gatherings and more. We have a wide range of templates to match the theme and tone of your event."
+                    ],
+                    [
+                        "question" => "6. What file format will my invitation video be in?",
+                        "answer" => "Typically, the invitation video will be in a common video format such as MP4, which is compatible with most devices and platforms. You can easily share your video via WhatsApp, social media, or email."
+                    ]
+                ],
+            ];
+
+            return $this->successed(datas: $response);
+        } catch (\Exception $e) {
+            return $this->failed(datas: [], msg: $e->getMessage());
         }
-
-        $response = [
-            'category_hierarchy' => self::getSubCategories(null, true),
-            'data' => $categories,
-            "pagination" => PaginationController::getPagination($datas),
-            "seo" => self::$templateSeo,
-        ];
-
-        $data = PReviewController::getPReviews("", 1, "15vODGdC", 1);
-        if ($data['success']) {
-            $response['reviews'] = $data['data'];
-        }
-
-        $response['faqs'] = [
-            "title" => "Frequently Asked Questions (FAQs)",
-            "data" => [
-                [
-                    "question" => "1. What is a Video Invitation?",
-                    "answer" => "A video invitation is a digital way to invite people to an event, using a video format rather than traditional paper invitations. It allows you to add creativity, sound, and visual elements, making your invitation more personal and engaging."
-                ],
-                [
-                    "question" => "2. How do I Create a Video Invitation?",
-                    "answer" => "You can easily create a video invitation using our website. Simply choose your preferred design, add event details, and customize the video with images, text, and music. Once you're satisfied, download the video and share it!"
-                ],
-                [
-                    "question" => "3. What are the benefits of creating invitation videos?",
-                    "answer" => "Creating invitation videos gives you a modern, creative, and customizable way to invite guests to your event. You can add music, photos, text, and personal touches to make your invitation stand out."
-                ],
-                [
-                    "question" => "4. How do I share my invitation video?",
-                    "answer" => "Once you’ve created your digital invite video, you can share it across multiple platforms like WhatsApp, email, or social media. It’s as simple as downloading the video and sending it to your guests!"
-                ],
-                [
-                    "question" => "5. Can I create a video invitation for an event?",
-                    "answer" => "Yes, you can create a video invitation for any type of event, from weddings to birthdays, corporate gatherings and more. We have a wide range of templates to match the theme and tone of your event."
-                ],
-                [
-                    "question" => "6. What file format will my invitation video be in?",
-                    "answer" => "Typically, the invitation video will be in a common video format such as MP4, which is compatible with most devices and platforms. You can easily share your video via WhatsApp, social media, or email."
-                ]
-            ],
-        ];
-
-        return $this->successed(datas: $response);
     }
 
     function getPage(Request $request): array|string
@@ -155,28 +161,31 @@ class LottieApiController extends ApiController
         if ($this->isFakeRequest($request))
             return $this->failed(msg: "Unauthorized");
 
-        $oldSlug = $request->input('slug');
-        if (empty($oldSlug))
-            return $this->failed(msg: "Parameters missing!");
+        try {
+            $oldSlug = $request->input('slug');
+            if (empty($oldSlug))
+                return $this->failed(msg: "Parameters missing!");
 
-        $hasPageInRequest = $request->has('page');
-        $data = HelperController::extractAndRemoveTrailingNumber($oldSlug);
-        $page = $hasPageInRequest ? $request->input('page', 1) : $data['number'] ?? 1;
-        $slug = $data['string'] ?? 1;
+            $hasPageInRequest = $request->has('page');
+            $data = HelperController::extractAndRemoveTrailingNumber($oldSlug);
+            $page = $hasPageInRequest ? $request->input('page', 1) : $data['number'] ?? 1;
+            $slug = $data['string'] ?? 1;
 
-        $slugData = VideoSlugHistory::whereSlug($slug)->first();
-        if (empty($slugData))
+            $slugData = VideoSlugHistory::whereSlug($slug)->first();
+            if (empty($slugData))
+                return $this->failed(msg: "Invalid data");
+            if ($slugData->reference_type == 'category') {
+                return $this->getCategory($request, $slug, $page);
+            } else if ($slugData->reference_type == 'virtual_page') {
+                return $this->getVirtualPage($request, $slug, $page);
+            } else if ($slugData->reference_type == 'templates') {
+                return $this->getTemplate($request, $slug);
+            }
+
             return $this->failed(msg: "Invalid data");
-
-        if ($slugData->reference_type === 'category') {
-            return $this->getCategory($request, $slug, $page);
-        } else if ($slugData->reference_type === 'virtual_page') {
-            return $this->getVirtualPage($request, $slug, $page);
-        } else if ($slugData->reference_type === 'templates') {
-            return $this->getTemplate($request, $slug);
+        } catch (\Exception $e) {
+            return $this->failed(datas: [], msg: $e->getMessage());
         }
-
-        return $this->failed(msg: "Invalid data");
     }
 
     function getCategory(Request $request, $slug, $page): array|string
@@ -368,6 +377,7 @@ class LottieApiController extends ApiController
 
         $response['category_hierarchy'] = self::getSubCategories($itemData->videoCat);
         $response['pre_breadcrumb'] = self::getCategoryBreadcrumbs($itemData->videoCat, $itemData->video_name, $itemData->slug, $itemData->virtualCat);
+
         $response['cta'] = isset($itemData->cta) ? HelperController::getCTA($itemData->cta) : null;
         $response['seo'] = [
             'h2_tag' => $itemData->h2_tag,
@@ -398,53 +408,57 @@ class LottieApiController extends ApiController
         if ($this->isFakeRequestAndUser($request))
             return $this->failed(msg: "Unauthorized");
 
-        $page = $request->has('page') ? $request->get('page') : 1;
+        try {
+            $page = $request->has('page') ? $request->get('page') : 1;
 
-        $limit = HelperController::getPaginationLimit(size: 10);
+            $limit = HelperController::getPaginationLimit(size: 10);
 
-        $purHistory = array();
+            $purHistory = array();
 
-        $purDatas = MasterPurchaseHistory::whereUserId($this->uid)->wherePaymentStatus('paid')->orderBy('id', 'DESC')->paginate($limit, ['*'], 'page', $page);
+            $purDatas = MasterPurchaseHistory::whereUserId($this->uid)->wherePaymentStatus('paid')->orderBy('id', 'DESC')->paginate($limit, ['*'], 'page', $page);
 
-        $allCategoryIds = $purDatas->getCollection()->pluck('product_id')->unique();
-        $designs = VideoTemplate::whereIn('string_id', $allCategoryIds)->get()->keyBy('string_id');
+            $allCategoryIds = $purDatas->getCollection()->pluck('product_id')->unique();
+            $designs = VideoTemplate::whereIn('string_id', $allCategoryIds)->get()->keyBy('string_id');
 
-        foreach ($purDatas->items() as $row) {
-            /** @var MasterPurchaseHistory $row */
-            /** @var VideoTemplate $subRow */
+            foreach ($purDatas->items() as $row) {
+                /** @var MasterPurchaseHistory $row */
+                /** @var VideoTemplate $subRow */
 
-            $subRow = $designs->get($row->product_id);
-            $currency_code = "$";
-            if ($row->currency_code === "INR") {
-                $currency_code = "₹";
+                $subRow = $designs->get($row->product_id);
+                $currency_code = "$";
+                if ($row->currency_code === "INR") {
+                    $currency_code = "₹";
+                }
+
+                $amount = $currency_code . $row->amount;
+
+                $purHistory[] = array(
+                    'id' => $row->product_id,
+                    'type' => $row->product_type,
+                    'name' => $subRow->video_name,
+                    'image' => HelperController::$mediaUrl . $subRow->video_thumb,
+                    'width' => $subRow->width,
+                    'height' => $subRow->height,
+                    'transaction_id' => $row->payment_id,
+                    'amount' => $amount,
+                    'purchase_date' => $row->created_at->format('d/m/Y H:i:s'),
+                    'status' => HelperController::checkSubsStatus($row->status),
+                    'color' => HelperController::getSubsColor($row->status),
+                );
             }
 
-            $amount = $currency_code . $row->amount;
+            $msg = 'Data loaded';
+            if (($page == 1 || $page == '1') && sizeof($purHistory) == 0) {
+                $msg = 'No History exist.';
+            }
 
-            $purHistory[] = array(
-                'id' => $row->product_id,
-                'type' => $row->product_type,
-                'name' => $subRow->video_name,
-                'image' => HelperController::$mediaUrl . $subRow->video_thumb,
-                'width' => $subRow->width,
-                'height' => $subRow->height,
-                'transaction_id' => $row->payment_id,
-                'amount' => $amount,
-                'purchase_date' => $row->created_at->format('d/m/Y H:i:s'),
-                'status' => HelperController::checkSubsStatus($row->status),
-                'color' => HelperController::getSubsColor($row->status),
-            );
+            $response['isLastPage'] = $purDatas->currentPage() >= $purDatas->lastPage();
+            $response['datas'] = $purHistory;
+
+            return $this->successed(msg: $msg, datas: $response);
+        } catch (\Exception $e) {
+            return $this->failed(datas: [], msg: $e->getMessage());
         }
-
-        $msg = 'Data loaded';
-        if (($page == 1 || $page == '1') && sizeof($purHistory) == 0) {
-            $msg = 'No History exist.';
-        }
-
-        $response['isLastPage'] = $purDatas->currentPage() >= $purDatas->lastPage();
-        $response['datas'] = $purHistory;
-
-        return $this->successed(msg: $msg, datas: $response);
     }
 
     public static function getCategoryBreadcrumbs(VideoCategory $cat = null, $last = null, $link = null, VideoVirtualCategory $v_cat = null): array
@@ -458,16 +472,8 @@ class LottieApiController extends ApiController
         ];
 
         if ($cat) {
-            if ($cat->parentCategory) {
-                $pre_breadcrumb[] = [
-                    'value' => $cat->parentCategory->category_name,
-                    "link" => $cat->parentCategory->slug,
-                    "openinnewtab" => 0,
-                    "nofollow" => 0
-                ];
-            }
             $pre_breadcrumb[] = [
-                'value' => $cat->category_name,
+                'value' => str_ireplace(' Invitation Video', '', $cat->category_name),
                 "link" => $cat->slug,
                 "openinnewtab" => 0,
                 "nofollow" => 0
@@ -682,67 +688,76 @@ class LottieApiController extends ApiController
      */
     public function getHeaderHierarchy(Request $request): array|string
     {
-        if ($this->isFakeRequest($request)) return $this->failed(msg: "Unauthorized");
+        if ($this->isFakeRequest($request))
+            return $this->failed(msg: "Unauthorized");
 
-        // 1. Fetch Subcategories (Main Category children)
-        $categories = VideoCategory::where('parent_category_id', '>', 0)
-            ->whereStatus(1)
-            ->with(['virtualPages' => fn($q) => $q->whereStatus(1)])
-            ->orderBy('id')
-            ->get();
+        try {
+            // 1. Fetch Subcategories (Main Category children)
+            $categories = VideoCategory::where('parent_category_id', '>', 0)
+                ->whereStatus(1)
+                ->with(['virtualPages' => fn($q) => $q->whereStatus(1)])
+                ->orderBy('id')
+                ->get();
 
-        $nav = [
-            "wedding" => [],
-            "engagement" => [],
-            "birthday" => [],
-            "baby" => [],
-            "more" => [],
-        ];
-
-        $mapper = function ($cat) {
-            $subItems = [];
-            if (isset($cat->virtualPages)) {
-                foreach ($cat->virtualPages as $vPage) {
-                    $subItems[] = [
-                        "title" => $vPage->category_name,
-                        "href" => $vPage->slug
-                    ];
-                }
-            }
-            return [
-                "title" => $cat->category_name,
-                "href" => $cat->slug,
-                "subcategories" => $subItems
+            $nav = [
+                "wedding" => [],
+                "engagement" => [],
+                "birthday" => [],
+                "baby" => [],
+                "more" => [],
             ];
-        };
 
-        // Group Main Subcategories
-        foreach ($categories as $cat) {
-            $slug = strtolower($cat->slug);
-            $group = "";
-
-            if (str_contains($slug, 'wedding')) $group = 'wedding';
-            else if (str_contains($slug, 'engagement')) $group = 'engagement';
-            else if (str_contains($slug, 'birthday')) $group = 'birthday';
-            else if (str_contains($slug, 'baby') || str_contains($slug, 'baby-shower')) $group = 'baby';
-
-            if ($group !== "") {
-                // Master category logic: Flat list (First category itself, then its virtuals)
-                $nav[$group][] = [
-                    "title" => $cat->category_name,
-                    "href" => $cat->slug
-                ];
-                foreach ($cat->virtualPages as $vPage) {
-                    $nav[$group][] = [
-                        "title" => $vPage->category_name,
-                        "href" => $vPage->slug
-                    ];
+            $mapper = function ($cat) {
+                $subItems = [];
+                if (isset($cat->virtualPages)) {
+                    foreach ($cat->virtualPages as $vPage) {
+                        $subItems[] = [
+                            "title" => $vPage->category_name,
+                            "href" => $vPage->slug
+                        ];
+                    }
                 }
-            } else {
-                $nav['more'][] = $mapper($cat);
-            }
-        }
+                return [
+                    "title" => $cat->category_name,
+                    "href" => $cat->slug,
+                    "subcategories" => $subItems
+                ];
+            };
 
-        return $this->successed(datas: $nav);
+            // Group Main Subcategories
+            foreach ($categories as $cat) {
+                $slug = strtolower($cat->slug);
+                $group = "";
+
+                if (str_contains($slug, 'wedding'))
+                    $group = 'wedding';
+                else if (str_contains($slug, 'engagement'))
+                    $group = 'engagement';
+                else if (str_contains($slug, 'birthday'))
+                    $group = 'birthday';
+                else if (str_contains($slug, 'baby') || str_contains($slug, 'baby-shower'))
+                    $group = 'baby';
+
+                if ($group !== "") {
+                    // Master category logic: Flat list (First category itself, then its virtuals)
+                    $nav[$group][] = [
+                        "title" => $cat->category_name,
+                        "href" => $cat->slug
+                    ];
+                    foreach ($cat->virtualPages as $vPage) {
+                        $nav[$group][] = [
+                            "title" => $vPage->category_name,
+                            "href" => $vPage->slug
+                        ];
+                    }
+                } else {
+                    $nav['more'][] = $mapper($cat);
+                }
+            }
+
+            return $this->successed(datas: $nav);
+        } catch (\Exception $e) {
+            return $this->failed(datas: [], msg: $e->getMessage());
+        }
     }
 }

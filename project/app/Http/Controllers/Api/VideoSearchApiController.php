@@ -27,6 +27,7 @@ class VideoSearchApiController extends ApiController
 
         $itemData = VideoTemplate::with(['videoCat', 'virtualCat'])
             ->where("string_id", "!=", $excludeTemplate)
+            ->whereTemplateType(0)
             ->where('status', $status_condition, $status)
             ->where(function ($query) use ($keywords) {
                 foreach ($keywords as $keyword) {
