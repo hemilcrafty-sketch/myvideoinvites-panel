@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Utils\Controller;
 use App\Http\Controllers\Utils\HelperController;
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Models\Revenue\PurchaseTransaction;
 use App\Models\Subscription;
 use App\Models\UserActivity;
 use App\Models\UserData;
@@ -553,7 +553,7 @@ class UserController extends Controller
         $user = UserData::where('uid', $id)->orWhere('email', $id)->first();
         if (!$user)
             abort(404);
-        $purchase = MasterPurchaseHistory::whereUserId($id)->whereNotNull('contact_no')->first();
+        $purchase = PurchaseTransaction::whereUserId($id)->whereNotNull('contact_no')->first();
         $datas['user'] = [
             'name' => $user->name,
             'email' => $user->email,

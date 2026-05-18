@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\Payment;
 
 use App\Http\Controllers\Api\Utils\ApiController;
 use App\Models\Order;
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Models\Revenue\PurchaseTransaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -80,7 +80,6 @@ class RazorpayWebhookController extends ApiController
 
         if ($order) {
             $order->status = 'paid';
-            $order->razorpay_payment_id = $payment['id'];
             if (empty($order->order_id)) $order->order_id = $orderEntity['id'];
             $order->payment_id = $payment['id'];
             $order->amount = $payment['amount'] / 100;
@@ -100,7 +99,7 @@ class RazorpayWebhookController extends ApiController
     private function handlePaymentAuthorized($payload): void
     {
         $payment = $payload['payment']['entity'];
-        $order = Order::where('razorpay_order_id', $payment['order_id'])->first();
+        $order = Order::where('order_id', $payment['order_id'])->first();
         if ($order && !in_array($order->status, ["paid", "success"], true)) {
             $order->status = 'processing';
             $order->save();
@@ -111,7 +110,7 @@ class RazorpayWebhookController extends ApiController
     {
         $payment = $payload['payment']['entity'];
 
-        $order = Order::where('razorpay_order_id', $payment['order_id'])->first();
+        $order = Order::where('order_id', $payment['order_id'])->first();
         if ($order) {
             if ($order->status !== 'paid') $order->status = 'success';
             $order->save();
@@ -121,7 +120,7 @@ class RazorpayWebhookController extends ApiController
     private function handlePaymentFailed($payload): void
     {
         $payment = $payload['payment']['entity'];
-        $order = Order::where('razorpay_order_id', $payment['order_id'])->first();
+        $order = Order::where('order_id', $payment['order_id'])->first();
         if ($order && !in_array($order->status, ["paid", "success"], true)) {
             $order->status = 'failed';
             $order->save();
@@ -131,44 +130,44 @@ class RazorpayWebhookController extends ApiController
     private function handleRefundCreated($payload): void
     {
         $refund = $payload['refund']['entity'];
-        $order = Order::where('razorpay_payment_id', $refund['payment_id'])->first();
+        $order = Order::where('payment_id', $refund['payment_id'])->first();
         if ($order) {
             $order->status = 'refund_initiated';
             $order->save();
         }
-        MasterPurchaseHistory::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'refund_initiated']);
+        PurchaseTransaction::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'refund_initiated']);
     }
 
     private function handleRefundProcessed($payload): void
     {
         $refund = $payload['refund']['entity'];
-        $order = Order::where('razorpay_payment_id', $refund['payment_id'])->first();
+        $order = Order::where('payment_id', $refund['payment_id'])->first();
         if ($order) {
             $order->status = 'refunded';
             $order->save();
         }
-        MasterPurchaseHistory::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'refunded']);
+        PurchaseTransaction::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'refunded']);
     }
 
     private function handleRefundFailed($payload): void
     {
         $refund = $payload['refund']['entity'];
-        $order = Order::where('razorpay_payment_id', $refund['payment_id'])->first();
+        $order = Order::where('payment_id', $refund['payment_id'])->first();
         if ($order) {
             $order->status = 'refund_failed';
             $order->save();
         }
-        MasterPurchaseHistory::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'refund_failed']);
+        PurchaseTransaction::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'refund_failed']);
     }
 
     private function handleDisputeLost($payload): void
     {
         $refund = $payload['refund']['entity'];
-        $order = Order::where('razorpay_payment_id', $refund['payment_id'])->first();
+        $order = Order::where('payment_id', $refund['payment_id'])->first();
         if ($order) {
             $order->status = 'refunded';
             $order->save();
         }
-        MasterPurchaseHistory::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'lost_dispute']);
+        PurchaseTransaction::whereTransactionId($refund['payment_id'])->update(['payment_status' => 'lost_dispute']);
     }
 }

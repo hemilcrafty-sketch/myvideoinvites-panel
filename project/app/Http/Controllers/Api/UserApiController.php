@@ -7,39 +7,17 @@ use App\Http\Controllers\Utils\HelperController;
 use App\Http\Controllers\Utils\StorageUtils;
 use App\Http\Controllers\Utils\ValidEmail;
 use App\Models\OTPTable;
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Models\Revenue\PurchaseTransaction;
+use App\Models\Video\VideoTemplate as Design;
 use App\Models\UserData;
 use App\Models\UserDataDeleted;
 use App\Models\UserSession;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Kreait\Firebase\Contract\Auth;
-use Kreait\Firebase\Exception\AuthException;
-use Kreait\Firebase\Exception\FirebaseException;
-use Kreait\Firebase\Factory;
 
 class UserApiController extends ApiController
 {
-
-    protected Auth $auth;
-
-    public function __construct(Request $request, Auth|null $auth = null)
-    {
-        parent::__construct($request);
-        if ($auth == null) {
-        $serviceAccountPath = storage_path('app/firebase/video-firebase-service-account.json');
-
-        if (!file_exists($serviceAccountPath)) {
-            throw new \Exception("Firebase JSON not found at: " . $serviceAccountPath);
-        }
-            $factory = (new Factory)->withServiceAccount($serviceAccountPath);
-            $this->auth = $factory->createAuth();
-        } else {
-            $this->auth = $auth;
-        }
-    }
 
     function updateUser(Request $request): array|string
     {
@@ -99,6 +77,73 @@ class UserApiController extends ApiController
         return $this->successed(msg: "User updated successfully.", datas: $this->getNewUserRes($request, $userData));
     }
 
+    public function getPurchases(Request $request)
+    {
+        if ($this->isFakeRequestAndUser($request)) {
+            return $this->failed(msg: "Unauthorized");
+        }
+
+        try {
+            $page = $request->get('page', 1);
+            $limit = 10;
+
+            // 1. Fetch Transactions with their Products
+            $transactions = PurchaseTransaction::with('products')
+                ->where('user_id', $this->uid)
+                ->where('payment_status', 'paid')
+                ->orderBy('id', 'DESC')
+                ->paginate($limit, ['*'], 'page', $page);
+
+            // 2. Collect unique product IDs for enrichment
+            $productIds = $transactions->getCollection()
+                ->pluck('products')
+                ->flatten()
+                ->pluck('product_id')
+                ->unique();
+
+            $designs = Design::whereIn('string_id', $productIds)->get()->keyBy('string_id');
+
+            $purHistory = [];
+            foreach ($transactions->items() as $trans) {
+                $currency = $trans->currency_code === "INR" ? "₹" : "$";
+                $transactionProducts = [];
+
+                foreach ($trans->products as $item) {
+                    $design = $designs->get($item->product_id);
+                    
+                    $transactionProducts[] = [
+                        'id'             => $item->product_id,
+                        'type'           => $item->product_type,
+                        'name'           => $design?->post_name ?? $design?->video_name ?? 'Product',
+                        'image'          => HelperController::$mediaUrl . ($design?->post_thumb ?? $design?->video_thumb ?? ''),
+                        'width'          => $design?->width ?? 0,
+                        'height'         => $design?->height ?? 0,
+                        'amount'         => $currency . $item->amount,
+                    ];
+                }
+
+                $purHistory[] = [
+                    'transaction_id' => $trans->payment_id,
+                    'amount'         => $currency . ($trans->paid_amount ?? $trans->amount),
+                    'purchase_date'  => $trans->created_at->format('d/m/Y H:i:s'),
+                    'status'         => HelperController::checkSubsStatus($trans->status),
+                    'color'          => HelperController::getSubsColor($trans->status),
+                    'products'       => $transactionProducts
+                ];
+            }
+
+            $response = [
+                'isLastPage' => $transactions->currentPage() >= $transactions->lastPage(),
+                'datas'      => $purHistory
+            ];
+
+            return $this->successed(msg: "Data loaded", datas: $response);
+
+        } catch (\Exception $e) {
+            return $this->failed(msg: $e->getMessage());
+        }
+    }
+
     function deleteUser(Request $request): array|string
     {
         if ($this->isFakeRequestAndUser($request)) {
@@ -122,14 +167,6 @@ class UserApiController extends ApiController
         $res->save();
 
         try {
-            try {
-                $this->auth->deleteUser($user_data->uid);
-            } catch (Exception $e) {
-                // If user is not found in Firebase, we should still proceed with local deletion
-                if (!str_contains(strtolower($e->getMessage()), 'not found') && !str_contains(strtolower($e->getMessage()), 'no user')) {
-                    throw $e;
-                }
-            }
 
             $res = new UserDataDeleted();
             $res->user_int_id = $user_data->id;
@@ -139,20 +176,11 @@ class UserApiController extends ApiController
             $res->razorpay_cus_id = $user_data->razorpay_cus_id;
             $res->photo_uri = $user_data->photo_uri;
             $res->name = $user_data->name;
-            $res->country_code = $user_data->country_code;
             $res->number = $user_data->contact_no;
             $res->email = $user_data->email;
             $res->login_type = $user_data->login_type;
-            $res->total_validity = $user_data->total_validity;
-            $res->validity = $user_data->validity;
-            $res->ai_credit = $user_data->ai_credit;
-            $res->is_premium = $user_data->is_premium;
-            $res->special_user = $user_data->special_user;
-            $res->can_update = $user_data->can_update;
             $res->utm_source = $user_data->utm_source;
             $res->utm_medium = $user_data->utm_medium;
-            $res->coins = $user_data->coins;
-            $res->device_id = $user_data->device_id;
             $res->fldr_str = $user_data->fldr_str;
             $res->creation_date = $user_data->created_at;
             $res->save();
@@ -160,9 +188,8 @@ class UserApiController extends ApiController
             UserData::where('uid', $this->uid)->delete();
 
             return $this->successed(msg: "Your account has been successfully deleted.");
-        } catch (Exception|AuthException|FirebaseException $e) {
-            Log::info($e->getMessage());
-            return $this->failed();
+        } catch (Exception $e) {
+            return $this->failed(msg: $e->getMessage(), showDecoded: true);
         }
     }
 
@@ -218,7 +245,7 @@ class UserApiController extends ApiController
             $user['photo_uri'] = HelperController::$mediaUrl . $userData->photo_uri;
         }
 
-        $user['total_spent'] = MasterPurchaseHistory::whereUserId($userData->uid)->wherePaymentStatus('paid')->sum('paid_amount');
+        $user['total_spent'] = PurchaseTransaction::whereUserId($userData->uid)->where('payment_status', 'paid')->sum('paid_amount');
 
         $response['user_details'] = [
             'device_limit' => $subData['device_limit'] ?? ((int)($userData->device_limit ?? 1)),
@@ -238,15 +265,18 @@ class UserApiController extends ApiController
 
     private function getUserPurchaseHistory(UserData $user_data): array|null
     {
-        $purchaseDatas = MasterPurchaseHistory::where('user_id', $user_data->uid)->wherePaymentStatus('paid')->get();
+        $purchaseDatas = PurchaseTransaction::with('products')
+            ->whereUserId($user_data->uid)
+            ->where('payment_status', 'paid')
+            ->get();
 
         $purchase_rows = [];
 
-        if ($purchaseDatas != null && $purchaseDatas->count() != 0) {
-            foreach ($purchaseDatas as $purchaseData) {
+        foreach ($purchaseDatas as $purchaseData) {
+            foreach ($purchaseData->products as $product) {
                 $purchase_rows[] = array(
-                    'id' => $purchaseData->product_id,
-                    'type' => $purchaseData->product_type,
+                    'id' => $product->product_id,
+                    'type' => $product->product_type,
                 );
             }
         }
@@ -286,66 +316,22 @@ class UserApiController extends ApiController
         return $username;
     }
 
-    public function checkFirebaseUid($uidORmail): array
-    {
-        try {
-            $user = $this->auth->getUserByEmail($uidORmail);
-
-            $userId = $user->uid;
-            $emailId = $user->email;
-
-            if ($userId && $emailId) {
-                return [
-                    'registered' => true,
-                    'user' => [
-                        'name' => $user->displayName ?? "User",
-                        'email' => $emailId,
-                        'photoUrl' => $user->photoUrl,
-                        'uid' => $userId,
-                    ]
-                ];
-            }
-            return ['registered' => false];
-        } catch (Exception|AuthException|FirebaseException $e) {
-            return ['registered' => false];
-        }
-    }
-
     public function createFirebaseUser(Request $request, $name, $email, $number, $password, $device_id = null, $utm_medium = null, $utm_source = null, $sendMail = true): array
     {
-        try {
-            $userInfo = null;
 
+        try {
             ValidEmail::passes($email);
 
-            $data = $this->checkFirebaseUid($email);
-            if ($data['registered']) {
-                $userInfo = $data['user'];
-            } else {
-                $user = $this->auth->createUser([
-                    'displayName' => $name,
+            $userData = UserData::whereEmail($email)->first();
+            if (!$userData) {
+                $uid = UserData::generateUid();
+                $userInfo = [
+                    'name' => $name,
                     'email' => $email,
-                    'password' => $password
-                ]);
-
-                $userId = $user->uid;
-                $emailId = $user->email;
-
-                if ($userId && $emailId) {
-
-                    $this->auth->updateUser($userId, [
-                        'emailVerified' => true
-                    ]);
-
-                    $userInfo = [
-                        'name' => $user->displayName ?? "CraftyArt",
-                        'email' => $emailId,
-                        'photoUrl' => $user->photoUrl,
-                        'uid' => $userId,
+                    'photoUrl' => null,
+                    'uid' => $uid,
                     ];
-                }
-            }
-            if ($userInfo) {
+
                 $result = $this->addUser(
                     request: $request,
                     uid: $userInfo['uid'],
@@ -361,12 +347,14 @@ class UserApiController extends ApiController
 
                 if (!$result['success']) return $result;
                 $userData = $result['data'];
-//                if ($sendMail) EmailController::sendUserCreation($userData, $password);
-                return $result;
             }
 
+//            if ($sendMail) EmailController::sendUserCreation($userData, $password);
 
-        } catch (Exception|AuthException|FirebaseException $e) {
+            return $this->successed(datas: ['data' => $userData], showDecoded: true);
+
+
+        } catch (\Exception $e) {
 
         }
 

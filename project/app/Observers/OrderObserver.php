@@ -25,7 +25,7 @@ class OrderObserver
             ]);
             
             // Use direct HTTP API call instead of Pusher library
-            \App\Http\Controllers\WebSocketBroadcastController::broadcastOrderCreatedDirect($order);
+            // \App\Http\Controllers\WebSocketBroadcastController::broadcastOrderCreatedDirect($order);
         } else if ($order->is_deleted == 0 && in_array($order->status, ['success', 'paid'])) {
             \Log::info('OrderObserver: Success order created (not broadcasting to main list)', [
                 'order_id' => $order->id, 
@@ -56,7 +56,7 @@ class OrderObserver
             // If status changed from pending/failed to success/paid, broadcast removal
             if (in_array($oldStatus, ['pending', 'failed']) && !in_array($newStatus, ['pending', 'failed'])) {
                 \Log::info('OrderObserver: Broadcasting order removal', ['order_id' => $order->id]);
-                \App\Http\Controllers\WebSocketBroadcastController::broadcastOrderStatusChanged($order, $oldStatus, $newStatus);
+                // \App\Http\Controllers\WebSocketBroadcastController::broadcastOrderStatusChanged($order, $oldStatus, $newStatus);
             }
         }
     }

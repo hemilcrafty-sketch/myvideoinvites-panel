@@ -17,7 +17,8 @@ use Illuminate\Support\Carbon;
  * @property string $payment_scope
  * @property string $gateway
  * @property array $credentials
- * @property array $payment_types
+ * @property array|null $payment_types Types: caricature, template, video, ai_credit, subscription
+ * @property bool $is_active
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @method static Builder|PaymentConfiguration newModelQuery()
@@ -27,10 +28,10 @@ use Illuminate\Support\Carbon;
  * @method static Builder|PaymentConfiguration whereCredentials($value)
  * @method static Builder|PaymentConfiguration whereGateway($value)
  * @method static Builder|PaymentConfiguration whereId($value)
+ * @method static Builder|PaymentConfiguration whereIsActive($value)
  * @method static Builder|PaymentConfiguration wherePaymentScope($value)
  * @method static Builder|PaymentConfiguration wherePaymentTypes($value)
  * @method static Builder|PaymentConfiguration whereUpdatedAt($value)
- * @method static Builder|PaymentConfiguration whereJsonContains(string $column, mixed $value)
  * @mixin Eloquent
  */
 class PaymentConfiguration extends Model
@@ -38,7 +39,6 @@ class PaymentConfiguration extends Model
     use HasFactory;
 
     protected $table = 'payment_configurations';
-    protected $connection = 'crafty_pricing_mysql';
 
     protected $fillable = [
         'payment_scope',
@@ -129,15 +129,5 @@ class PaymentConfiguration extends Model
         if (!$paymentConfigs) $paymentConfigs = self::getAllPaymentConfig();
         if ($scope) $paymentConfigs->where('payment_scope', $scope);
         return $paymentConfigs->where('gateway', $gateway)->first();
-    }
-
-    public static function getCredentialsByNameWithFallback(?Collection $paymentConfigs, string $scope, string $gateway)
-    {
-        if (!$paymentConfigs) $paymentConfigs = self::getAllPaymentConfig();
-        $paymentConfig = $paymentConfigs->where('payment_scope', $scope)->Where('gateway', $gateway)->first();
-        if (!$paymentConfig) {
-            $paymentConfig = $paymentConfigs->where('payment_scope', $scope)->first();
-        }
-        return $paymentConfig;
     }
 }

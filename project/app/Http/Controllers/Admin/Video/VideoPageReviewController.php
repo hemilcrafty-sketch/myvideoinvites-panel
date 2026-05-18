@@ -28,7 +28,7 @@ class VideoPageReviewController extends AppBaseController
             ['id' => 'rate', 'value' => 'Rate']
         ];
 
-        $query = VideoPageReview::query()->whereIn('p_type', [1, 2, 3]);
+        $query = VideoPageReview::query()->whereIn('p_type', [6, 7, 8]);
         $videoPageReviews = $this->applyFiltersAndPagination($request, $query, $searchableFields);
 
         return view("videos.page_reviews.index", [

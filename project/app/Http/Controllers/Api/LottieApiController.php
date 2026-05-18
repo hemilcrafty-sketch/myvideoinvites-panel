@@ -7,7 +7,8 @@ use App\Http\Controllers\Api\Utils\ApiController;
 use App\Http\Controllers\Api\Utils\PaginationController;
 use App\Http\Controllers\Utils\HelperController;
 use App\Http\Controllers\Utils\StorageUtils;
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Models\Revenue\PurchaseTransaction;
+use App\Models\Revenue\PurchaseTransactionProduct;
 use App\Models\Video\VideoCategory;
 use App\Models\Video\VideoInterest;
 use App\Models\Video\VideoLanguage;
@@ -18,6 +19,7 @@ use App\Models\Video\VideoStyle;
 use App\Models\Video\VideoTemplate;
 use App\Models\Video\VideoTheme;
 use App\Models\Video\VideoVirtualCategory;
+use App\Models\UserData;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Exception;
@@ -182,9 +184,9 @@ class LottieApiController extends ApiController
                 return $this->getTemplate($request, $slug);
             }
 
-            return $this->failed(msg: "Invalid data");
+            return $this->failed(msg: "Invalid data", showDecoded: true);
         } catch (\Exception $e) {
-            return $this->failed(datas: [], msg: $e->getMessage());
+            return $this->failed(datas: [], msg: $e->getMessage(), showDecoded: true);
         }
     }
 
@@ -202,8 +204,14 @@ class LottieApiController extends ApiController
         $contentCacheKey = 'vi_category_content_' . $slug;
         $faqCacheKey = 'vi_category_faq_' . $slug;
 
-        $templatesQuery = VideoTemplate::with(['videoCat', 'virtualCat'])->whereCategoryId($category->id)->whereTemplateType(0)->whereIsDeleted(0)->whereStatus(1);
-
+        $templatesQuery = VideoTemplate::with(['videoCat', 'virtualCat'])
+                    ->whereCategoryId($category->id)
+                    ->when(!$request->has('is_app'), function ($query) {
+                        $query->whereTemplateType(0);
+                    })
+                    ->whereIsDeleted(0)
+                    ->whereStatus(1)
+                    ->orderBy('created_at', 'desc');
         if (!empty($filter))
             $templatesQuery = self::getFilterQuery($templatesQuery, $filter);
 
@@ -328,22 +336,25 @@ class LottieApiController extends ApiController
     function getTemplate(Request $request, $slug = null): array|string
     {
         if (empty($slug) && $this->isFakeRequest($request))
-            return $this->failed(msg: "Unauthorized");
+            return $this->failed(msg: "Unauthorized", showDecoded: true);
 
         $slug = $request->input('slug', $slug);
         if (empty($slug))
-            return $this->failed(msg: "Parameters missing!");
+        return $this->failed(msg: "Parameters missing!", showDecoded: true);
 
         $itemData = VideoTemplate::with(['videoCat', 'virtualCat'])
             ->where(function ($query) use ($slug) {
                 $query->where('string_id', $slug)
                     ->orWhere('slug', $slug);
             })
-            ->whereTemplateType(0)->whereStatus(1)
+            ->when(!$request->has('is_app'), function ($query) {
+                $query->whereTemplateType(0);
+            })
+            ->whereStatus(1)
             ->whereIsDeleted(0)
-            ->first();
-        if (empty($itemData))
-            return $this->failed(msg: "Video not found");
+                    ->first();
+        if (empty($itemData))   
+            return $this->failed(msg: "Video not found", showDecoded: true);
         $rates = RateController::getRates(true);
         $data = HelperController::getVideoItemData(item: $itemData, rates: $rates);
         $data = array(
@@ -392,15 +403,29 @@ class LottieApiController extends ApiController
         if ($data['success']) {
             $response['reviews'] = $data['data'];
         }
-        $response['needToPurchase'] = !MasterPurchaseHistory::where('product_id', $itemData->string_id)->where('user_id', $this->uid)->exists();
 
+        $userData = UserData::whereUid($this->uid)->first();
+        if ($userData?->internal_user === 1) {
+            $response['needToPurchase'] =false;
+        } else {
+            $isPurchased = PurchaseTransactionProduct::where('product_id', $itemData->string_id)
+            ->whereHas('transaction', function ($q) {
+                $q->where('user_id', $this->uid)
+                ->where('status', 1);
+            })
+            ->exists();
+
+            $response['needToPurchase'] = !$isPurchased;
+        }
+               
+            
         $ipData = HelperController::getIpAndCountry($request);
         $response['currency'] = $ipData['cur'];
 
         return $this->successed(datas: [
             'type' => 'product_page',
             'data' => $response
-        ], noIndex: $itemData->no_index);
+        ], noIndex: $itemData->no_index, showDecoded: true);
     }
 
     function getPurchases(Request $request): array|string
@@ -415,22 +440,29 @@ class LottieApiController extends ApiController
 
             $purHistory = array();
 
-            $purDatas = MasterPurchaseHistory::whereUserId($this->uid)->wherePaymentStatus('paid')->orderBy('id', 'DESC')->paginate($limit, ['*'], 'page', $page);
+            $purDatas = PurchaseTransactionProduct::whereHas('transaction', function ($q) {
+                $q->where('user_id', $this->uid)->where('payment_status', 'paid');
+            })
+            ->with('transaction')
+            ->orderBy('id', 'DESC')
+            ->paginate($limit, ['*'], 'page', $page);
 
-            $allCategoryIds = $purDatas->getCollection()->pluck('product_id')->unique();
-            $designs = VideoTemplate::whereIn('string_id', $allCategoryIds)->get()->keyBy('string_id');
+            $allProductIds = $purDatas->getCollection()->pluck('product_id')->unique();
+            $designs = VideoTemplate::whereIn('string_id', $allProductIds)->get()->keyBy('string_id');
 
             foreach ($purDatas->items() as $row) {
-                /** @var MasterPurchaseHistory $row */
-                /** @var VideoTemplate $subRow */
-
+                /** @var PurchaseTransactionProduct $row */
+                $transaction = $row->transaction;
                 $subRow = $designs->get($row->product_id);
+
+                if (!$subRow) continue;
+
                 $currency_code = "$";
-                if ($row->currency_code === "INR") {
+                if ($transaction->currency_code === "INR") {
                     $currency_code = "₹";
                 }
 
-                $amount = $currency_code . $row->amount;
+                $amount = $currency_code . $transaction->amount;
 
                 $purHistory[] = array(
                     'id' => $row->product_id,
@@ -439,11 +471,11 @@ class LottieApiController extends ApiController
                     'image' => HelperController::$mediaUrl . $subRow->video_thumb,
                     'width' => $subRow->width,
                     'height' => $subRow->height,
-                    'transaction_id' => $row->payment_id,
+                    'transaction_id' => $transaction->payment_id,
                     'amount' => $amount,
                     'purchase_date' => $row->created_at->format('d/m/Y H:i:s'),
-                    'status' => HelperController::checkSubsStatus($row->status),
-                    'color' => HelperController::getSubsColor($row->status),
+                    'status' => HelperController::checkSubsStatus($transaction->status),
+                    'color' => HelperController::getSubsColor($transaction->status),
                 );
             }
 

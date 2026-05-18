@@ -2,7 +2,8 @@
 
 namespace App\Models;
 
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Http\Controllers\Utils\HelperController;
+use App\Models\Revenue\PurchaseTransaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -43,7 +44,7 @@ use Laravel\Sanctum\PersonalAccessToken;
  * @property Carbon $updated_at
  * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
- * @property-read Collection<int, MasterPurchaseHistory> $purchaseLogs
+ * @property-read Collection<int, PurchaseTransaction> $purchaseLogs
  * @property-read int|null $purchase_logs_count
  * @property-read Collection<int, UserData> $referredUsers
  * @property-read int|null $referred_users_count
@@ -92,7 +93,7 @@ class UserData extends Authenticatable
 
     public function purchaseLogs(): HasMany
     {
-        return $this->hasMany(MasterPurchaseHistory::class, 'user_id', 'uid');
+        return $this->hasMany(PurchaseTransaction::class, 'user_id', 'uid');
     }
 
     public function referrer(): BelongsTo
@@ -103,5 +104,10 @@ class UserData extends Authenticatable
     public function referredUsers(): HasMany
     {
         return $this->hasMany(UserData::class, 'referral_user_id', 'id');
+    }
+
+    public static function generateUid(): string
+    {
+        return HelperController::generateRandomId(length: 20, modelSource: self::class, column: 'uid');
     }
 }

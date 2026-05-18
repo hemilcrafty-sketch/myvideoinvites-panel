@@ -34,6 +34,16 @@ return [
     */
 
     'mailers' => [
+        'otp' => [
+            'transport' => 'smtp',
+            'host' => env('MAIL_OTP_HOST', 'smtp.mailgun.org'),
+            'port' => env('MAIL_OTP_PORT', 587),
+            'encryption' => env('MAIL_OTP_ENCRYPTION', 'tls'),
+            'username' => env('MAIL_OTP_USERNAME'),
+            'password' => env('MAIL_OTP_PASSWORD'),
+            'timeout' => null,
+            'auth_mode' => null,
+        ],
         'smtp' => [
             'transport' => 'smtp',
             'host' => env('MAIL_HOST', 'smtp.mailgun.org'),

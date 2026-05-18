@@ -19,21 +19,23 @@ use Illuminate\Support\Carbon;
  * @property int|null $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @method static Builder|OtpTable newModelQuery()
- * @method static Builder|OtpTable newQuery()
- * @method static Builder|OtpTable query()
- * @method static Builder|OtpTable whereCreatedAt($value)
- * @method static Builder|OtpTable whereId($value)
- * @method static Builder|OtpTable whereMail($value)
- * @method static Builder|OtpTable whereMsg($value)
- * @method static Builder|OtpTable whereOtp($value)
- * @method static Builder|OtpTable whereStatus($value)
- * @method static Builder|OtpTable whereType($value)
- * @method static Builder|OtpTable whereUpdatedAt($value)
+ * @method static Builder|OTPTable newModelQuery()
+ * @method static Builder|OTPTable newQuery()
+ * @method static Builder|OTPTable query()
+ * @method static Builder|OTPTable whereCreatedAt($value)
+ * @method static Builder|OTPTable whereId($value)
+ * @method static Builder|OTPTable whereMail($value)
+ * @method static Builder|OTPTable whereMsg($value)
+ * @method static Builder|OTPTable whereOtp($value)
+ * @method static Builder|OTPTable whereStatus($value)
+ * @method static Builder|OTPTable whereType($value)
+ * @method static Builder|OTPTable whereUpdatedAt($value)
  * @mixin Eloquent
  */
-class OtpTable extends Model
+class OTPTable extends Model
 {
     protected $connection = 'mysql';
+    protected $table = 'otp_tables';
+
     use HasFactory;
 }

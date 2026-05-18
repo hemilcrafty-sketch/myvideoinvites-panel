@@ -6,30 +6,16 @@ use App\Helpers\JwtHelper;
 use App\Http\Controllers\Api\Utils\ApiController;
 use App\Http\Controllers\Api\Utils\ResponseHandler;
 use App\Http\Controllers\Api\Utils\ResponseInterface;
-use App\Models\OtpTable;
+use App\Models\OTPTable;
 use App\Models\UserData;
 use App\Models\UserSession;
 use Exception;
+use Google_Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Kreait\Firebase\Contract\Auth;
-use Kreait\Firebase\Exception\AuthException;
-use Kreait\Firebase\Exception\FirebaseException;
-use Kreait\Firebase\Factory;
 
 class AuthController extends ApiController
 {
-
-    protected Auth $auth;
-
-    public function __construct(Request $request)
-    {
-        parent::__construct($request);
-
-        $serviceAccountPath = "/private-files/video-firebase-service-account.json";
-        $factory = (new Factory)->withServiceAccount($serviceAccountPath);
-        $this->auth = $factory->createAuth();
-    }
 
     function getUser(Request $request): array|string
     {
@@ -86,21 +72,12 @@ class AuthController extends ApiController
             return $this->failed(statusCode: 400, msg: "Invalid request");
 
         $user_data = UserData::whereEmail($email)->first();
-        if (!$user_data)
+        if (!$user_data) {
             return $this->failed(statusCode: 400, msg: "Email is not registered");
+        }
 
         if (!Hash::check($password, $user_data->password)) {
-            try {
-                $result = $this->auth->signInWithEmailAndPassword($email, $password);
-                if (empty($result->firebaseUserId()))
-                    return $this->failed(statusCode: 400, msg: "Incorrect Password");
-                else {
-                    $user_data->password = Hash::make($password);
-                    $user_data->save();
-                }
-            } catch (\Exception $e) {
-                return $this->failed(statusCode: 400, msg: "Incorrect Password");
-            }
+            return $this->failed(statusCode: 400, msg: "Incorrect Password");
         }
 
         $this->deviceId = UserSession::generateDeviceId();
@@ -150,11 +127,12 @@ class AuthController extends ApiController
             return $this->failed(msg: "Password length is short");
 
         $data = OTPTable::whereMail($email)->whereType('account_create')->get()->last();
-        if (!$data || $data->status == "0" || $data->otp != $otp)
+        if (!$data || $data->status == "0" || $data->otp != $otp) {
             return $this->failed(msg: "Invalid otp");
+        }
+
         $success = OTPTable::whereMail($email)->update(["status" => 0]);
-        if (!$success)
-            return $this->failed();
+        if (!$success) return $this->failed();
 
         $this->deviceId = UserSession::generateDeviceId();
 
@@ -196,18 +174,24 @@ class AuthController extends ApiController
 
         $token = $request->get('token');
 
-        $utm_medium = $request->get('utm_medium', "craftyart");
-        $utm_source = $request->get('utm_source', "craftyart");
+        $utm_medium = $request->get('utm_medium', "");
+        $utm_source = $request->get('utm_source', "");
 
         try {
-            $data = $this->auth->verifyIdToken($token);
-            $name = $data->claims()->get('name');
-            $email = $data->claims()->get('email');
-            $photo_uri = $data->claims()->get('picture');
-        } catch (\Exception $e) {
+
+            $client = new Google_Client([
+                'client_id' => "244313981818-9ld8fbpa50p7mfrgv48tjm0dstqhunmd.apps.googleusercontent.com"
+            ]);
+
+            $payload = $client->verifyIdToken($token);
+            if (!$payload) return $this->failed(statusCode: 400, msg: "Invalid token");
+
+            $name = $payload['name'];
+            $email = $payload['email'];
+            $photo_uri = $payload['picture'];
+        } catch (Exception $e) {
             return $this->failed(statusCode: 400, msg: "Invalid token");
         }
-        $this->auth->verifyIdToken($token)->claims()->get('email');
 
         $user_data = UserData::whereEmail($email)->first();
         $userController = new UserApiController($request);
@@ -215,17 +199,12 @@ class AuthController extends ApiController
         $this->deviceId = UserSession::generateDeviceId();
 
         if (!$user_data) {
-            $isExists = $userController->checkFirebaseUid($email);
-            if (!$isExists['registered'])
-                return $this->failed();
 
-            $userController = new UserApiController($request, $this->auth);
+            $userController = new UserApiController($request);
+            $uid = UserData::generateUid();
+            $result = $userController->addUser($request, $uid, $photo_uri, $name, $email, null, "Google", $this->deviceId, $utm_medium, $utm_source);
 
-            $userInfo = $isExists['user'];
-            $result = $userController->addUser($request, $userInfo['uid'], $photo_uri, $name, $email, null, "Google", $this->deviceId, $utm_medium, $utm_source);
-
-            if (!$result['success'])
-                return ResponseHandler::sendEncryptedResponse($request, $result);
+            if (!$result['success']) return ResponseHandler::sendEncryptedResponse($request, $result);
             $user_data = $result['data'];
         }
 
@@ -278,7 +257,6 @@ class AuthController extends ApiController
             return $this->failed();
 
         try {
-            $this->auth->changeUserPassword($user_data->uid, $password);
             $password = Hash::make($password);
             $success = UserData::where('email', $email)->update(["password" => $password]);
             if (!$success)
@@ -290,7 +268,7 @@ class AuthController extends ApiController
             }
 
             return $this->successed(msg: "Password has been changed successfully");
-        } catch (Exception | AuthException | FirebaseException $e) {
+        } catch (Exception $e) {
             return $this->failed();
         }
     }

@@ -14,7 +14,7 @@ class ApiController extends Controller
 {
     public array|null|string $uid = null;
     public array|null|string $deviceId;
-    public string $testingUid = "";
+    public string $testingUid = "yjAMpvXCAORZVguaIvAL";
     public string $aesPassword = 'E@7r1K7!6v#KZx^m';
     public string|null $clientIp = null;
     private Request $request;

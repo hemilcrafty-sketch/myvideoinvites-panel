@@ -4,8 +4,15 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreatePurchaseHistoryTable extends Migration
+class CreatePurchaseTransactionsTable extends Migration
 {
+    /**
+     * The database connection that should be used by the migration.
+     *
+     * @var string
+     */
+    protected $connection = 'mysql';
+
     /**
      * Run the migrations.
      *
@@ -13,23 +20,22 @@ class CreatePurchaseHistoryTable extends Migration
      */
     public function up()
     {
-        if (!Schema::hasTable('purchase_history')) {
-            Schema::create('purchase_history', function (Blueprint $table) {
+        if (!Schema::hasTable('purchase_transactions')) {
+            Schema::create('purchase_transactions', function (Blueprint $table) {
                 $table->id();
-                $table->integer('emp_id')->default(0);
+                $table->integer('emp_id')->nullable();
                 $table->integer('by_sales_team')->default(0);
                 $table->string('user_id')->index();
                 $table->string('contact_no')->nullable();
-                $table->string('product_id')->nullable();
-                $table->string('product_type')->nullable();
                 $table->string('subscription_id')->nullable();
                 $table->string('order_id')->nullable();
-                $table->string('transaction_id')->nullable();
+                $table->string('transaction_id')->nullable()->index();
                 $table->string('payment_id')->nullable();
                 $table->string('currency_code')->nullable();
                 $table->float('amount')->default(0);
                 $table->float('paid_amount')->nullable();
                 $table->float('net_amount')->default(0);
+                $table->float('fee_percentage')->default(0);
                 $table->string('next_amount')->nullable();
                 $table->integer('promo_code_id')->default(0);
                 $table->string('payment_method')->nullable();
@@ -52,6 +58,22 @@ class CreatePurchaseHistoryTable extends Migration
                 $table->timestamps();
             });
         }
+
+        if (!Schema::hasTable('purchase_transaction_products')) {
+            Schema::create('purchase_transaction_products', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('purchase_transaction_id')->index();
+                $table->string('product_id')->nullable();
+                $table->string('product_type')->nullable();
+                $table->float('amount')->default(0);
+                $table->timestamps();
+
+                $table->foreign('purchase_transaction_id', 'purchase_txn_id_foreign')
+                    ->references('id')
+                    ->on('purchase_transactions')
+                    ->onDelete('cascade');
+            });
+        }
     }
 
     /**
@@ -61,8 +83,7 @@ class CreatePurchaseHistoryTable extends Migration
      */
     public function down()
     {
-        if (Schema::hasTable('purchase_history')) {
-            Schema::dropIfExists('purchase_history');
-        }
+        Schema::dropIfExists('purchase_transaction_products');
+        Schema::dropIfExists('purchase_transactions');
     }
 }

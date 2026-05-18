@@ -8,8 +8,10 @@ use Illuminate\Http\Request;
 class DomainChecker extends Controller
 {
 
-    const authorizedUserDomain = ['www.myvideoinvites.com'];
-    const allowedDomains = ['www.myvideoinvites.com', 'beta.myvideoinvites.com', 'api.myvideoinvites.com', 'media.myvideoinvites.com'];
+    const authorizedUserDomain = ['www.myvideoinvites.com', 'editor.craftyartapp.com', 'payment.craftyartapp.com' , 'beta.myvideoinvites.com'];
+    const allowedDomains = ['www.craftyartapp.com', 'beta.craftyartapp.com','www.myvideoinvites.com','beta.myvideoinvites.com',
+        'editor.craftyartapp.com', /*'betaeditor.craftyartapp.com',*/
+        'updater.craftyartapp.com', 'designer.craftyartapp.com', 'payment.craftyartapp.com', 'bgremover.craftyartapp.com'];
 
     public static function isFromAuthorizedUserDomain(Request $request): bool
     {
@@ -83,7 +85,7 @@ class DomainChecker extends Controller
     private static function checkIp(Request $request): bool
     {
         return true;
-        //        $ip = ApiController::findIp($request);
+//        $ip = ApiController::findIp($request);
 //
 //        if (!$ip) {
 //            return false;
@@ -105,15 +107,15 @@ class DomainChecker extends Controller
 
         return 1;
 
-        //        $isExists = AllowedIp::where(function ($query) use ($ip) {
+//        $isExists = AllowedIp::where(function ($query) use ($ip) {
 //            $query->where('main_ip', $ip)
 //                ->orWhere('additional', 'like', '%' . $ip . '%');
 //        })->exists();
 
-        //        return $isExists ? 1 : 0;
+//        return $isExists ? 1 : 0;
     }
 
-    public static function isAllowedIps($ip): bool
+    public static function isAllowedIps ($ip): bool
     {
         if (!$ip) {
             return false;

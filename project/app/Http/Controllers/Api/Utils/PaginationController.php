@@ -7,12 +7,12 @@ use Illuminate\Pagination\LengthAwarePaginator;
 class PaginationController
 {
 
-    public static function buildCanonicalLink($canonicalLink, $frontendUrl, $page, $isLoggedIn = false): string
+    public static function buildCanonicalLink($canonicalLink, $frontendUrl, $page): string
     {
         if (!empty($canonicalLink)) {
             return $canonicalLink;
         }
-        if ($page != 1 && !$isLoggedIn) {
+        if ($page != 1) {
             return "$frontendUrl/$page";
         }
         return $frontendUrl;

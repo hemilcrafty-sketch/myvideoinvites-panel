@@ -264,8 +264,6 @@ class VideoVirtualCategoryController extends AppBaseController
                 StorageUtils::delete($oldFaqPath);
             }
 
-            $previewRoute = route('edit_video_virtual_cat', ['id' => $res->id ?? 0]);
-
             return PendingTaskController::store(
                 $res,
                 VideoVirtualCategory::class,
@@ -273,7 +271,7 @@ class VideoVirtualCategoryController extends AppBaseController
                 $categoryId ? 'Video Virtual Category Update' : 'Video Virtual Category Add',
                 "v_vcat",
                 $categoryId ? 'update' : 'add',
-                $previewRoute,
+                null,
                 RoleManager::isAdminOrSeoManager(auth()->user()->user_type),
                 $res->category_name
             );
@@ -312,28 +310,15 @@ class VideoVirtualCategoryController extends AppBaseController
 
     public function edit(Request $request, $id)
     {
-        $isPreview = $request->query('preview');
-        $datas = [];
-
-        if ($id == 0 && $isPreview) {
-            $res = new VideoVirtualCategory();
-            $res->id = 0;
-        } else {
-            $res = VideoVirtualCategory::find($id);
-            if (!$res) {
-                abort(404);
-            }
+        $res = VideoVirtualCategory::find($id);
+        if (!$res) {
+            abort(404);
         }
 
+        $isPreview = $request->query('preview');
         if ($isPreview) {
-            $pendingTask = \App\Models\PendingTask::where('table_name', 'v_vcat')
-                ->where(function($q) use ($id) {
-                    if ($id == 0) {
-                        $q->whereNull('record_id')->orWhere('record_id', 0);
-                    } else {
-                        $q->where('record_id', $id);
-                    }
-                })
+            $pendingTask = \App\Models\PendingTask::where('model_id', $id)
+                ->where('model_type', VideoVirtualCategory::class)
                 ->where('status', 0)
                 ->orderBy('id', 'desc')
                 ->first();

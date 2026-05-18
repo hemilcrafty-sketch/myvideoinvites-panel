@@ -219,7 +219,7 @@ class VideoCatController extends AppBaseController
                 'Video Category Add',
                 "v_cat",
                 'add',
-                route('edit_v_cat', ['id' => 0]),
+                null,
                 RoleManager::isAdminOrSeoManager(auth()->user()->user_type),
                 $res->category_name
             );
@@ -294,25 +294,12 @@ class VideoCatController extends AppBaseController
 
     public function edit($id, Request $request): Factory|View|Application
     {
+        $cat = VideoCategory::findOrFail($id);
         $isPreview = $request->query('preview');
-        $datas = [];
-
-        if ($id == 0 && $isPreview) {
-            $cat = new VideoCategory();
-            $cat->id = 0;
-        } else {
-            $cat = VideoCategory::findOrFail($id);
-        }
 
         if ($isPreview) {
-            $pendingTask = \App\Models\PendingTask::where('table_name', 'v_cat')
-                ->where(function($q) use ($id) {
-                    if ($id == 0) {
-                        $q->whereNull('record_id')->orWhere('record_id', 0);
-                    } else {
-                        $q->where('record_id', $id);
-                    }
-                })
+            $pendingTask = \App\Models\PendingTask::where('record_id', $id)
+                ->where('table_name', 'v_cat')
                 ->where('status', 0)
                 ->orderBy('id', 'desc')
                 ->first();

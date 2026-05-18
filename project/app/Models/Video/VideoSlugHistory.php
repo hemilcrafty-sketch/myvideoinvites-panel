@@ -50,17 +50,17 @@ class VideoSlugHistory extends Model
         }
         $slug = ltrim($slug, '/');
 
-        // ❌ Should not end with '/'
+        // :x: Should not end with '/'
         if (str_ends_with($slug, '/')) {
             return "Slug cannot end with '/'";
         }
 
-        // ✅ Base validation (allowed characters)
+        // :white_check_mark: Base validation (allowed characters)
         if (!preg_match('/^[a-zA-Z0-9\/_-]+$/', $slug)) {
             return "Slug must be a valid URL format (only letters, numbers, -, _, / allowed, no spaces)";
         }
 
-        // ✅ Check: no segment should be purely numeric
+        // :white_check_mark: Check: no segment should be purely numeric
         $segments = explode('/', $slug);
 
         foreach ($segments as $segment) {
@@ -69,7 +69,7 @@ class VideoSlugHistory extends Model
             }
         }
 
-        // ✅ Check uniqueness
+        // :white_check_mark: Check uniqueness
         if ($id == 0) {
             $slugHistory = VideoSlugHistory::whereSlug($slug)->first();
         } else {

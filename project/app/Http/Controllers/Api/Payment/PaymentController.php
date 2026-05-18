@@ -9,10 +9,13 @@ use App\Http\Controllers\Api\RateController;
 use App\Http\Controllers\Api\UserApiController;
 use App\Http\Controllers\Api\Utils\ApiController;
 use App\Http\Controllers\Utils\DomainChecker;
+use App\Http\Controllers\Utils\FacebookEvent;
+use App\Http\Controllers\Utils\FbPixel;
 use App\Http\Controllers\Utils\HelperController;
 use App\Models\Order;
 use App\Models\PromoCode;
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Models\Revenue\PurchaseTransaction;
+use App\Models\Revenue\PurchaseTransactionProduct;
 use App\Models\UserData;
 use App\Models\Video\VideoTemplate;
 use App\Service\PaymentGateway;
@@ -25,6 +28,7 @@ use PhonePe\payments\v2\standardCheckout\StandardCheckoutClient;
 use Razorpay\Api\Api;
 use Stripe\Exception\ApiErrorException;
 use Stripe\StripeClient;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends ApiController
 {
@@ -57,7 +61,7 @@ class PaymentController extends ApiController
                 $datas = $razorpay->payment->all(array('count' => '100'));
                 $datas = $datas->toArray();
                 foreach ($datas['items'] as $value) {
-                    if (MasterPurchaseHistory::whereTransactionId($value['id'])->exists()) continue;
+                    if (PurchaseTransaction::whereTransactionId($value['id'])->exists()) continue;
                     if ($value['status'] == 'captured') {
                         $result = $this->enterTransData(
                             request: $request,
@@ -79,7 +83,7 @@ class PaymentController extends ApiController
                 $datas = $datas->toArray();
                 foreach ($datas['data'] as $value) {
 
-                    if (MasterPurchaseHistory::whereTransactionId($value['balance_transaction'])->exists()) continue;
+                    if (PurchaseTransaction::whereTransactionId($value['balance_transaction'])->exists()) continue;
 
                     if ($value['amount'] == $value['amount_captured'] && $value['amount_refunded'] === 0 && $value['amount'] > 100) {
                         $result = $this->enterTransData(
@@ -101,7 +105,7 @@ class PaymentController extends ApiController
                 $datas = Order::whereGateway('phonepe_pg')->where("status", "!=", "failed")->get();
                 foreach ($datas as $value) {
                     $phonepeData = $phonepe->getOrderStatus($value->crafty_id, true);
-                    if ($phonepeData->getState() === 'COMPLETED' && !MasterPurchaseHistory::whereTransactionId($value->crafty_id)->exists()) {
+                    if ($phonepeData->getState() === 'COMPLETED' && !PurchaseTransaction::whereTransactionId($value->crafty_id)->exists()) {
 
                         $paidAmount = $phonepeData->getAmount() / 100;
 
@@ -128,7 +132,7 @@ class PaymentController extends ApiController
         } catch (Exception $e) {
             $response['success'] = false;
             $response['errors'] = $errors;
-            $response['message'] = $e->getMessage();
+            $response['message'] = $e->getTrace();
         }
 
         return $response;
@@ -147,7 +151,7 @@ class PaymentController extends ApiController
         $data['curSymbol'] = $ipData['cur'] === "INR" ? '₹' : '$';
 
         if ($show24Buyers) {
-            $last24Buyers = MasterPurchaseHistory::where('created_at', '>=', now()->subHours(24))->count();
+            $last24Buyers = PurchaseTransaction::where('created_at', '>=', now()->subHours(24))->count();
             $data['last_24_hours_buyers'] = "$last24Buyers sold in last 24 hours";
         }
 
@@ -506,12 +510,23 @@ class PaymentController extends ApiController
 
         Order::create($orderData);
 
+        // Track INITIATE_CHECKOUT
+        Log::info("createOrder FacebookEvent::INITIATE_CHECKOUT start", [
+            'order_data' => $orderData
+        ]);
+        FbPixel::purchaseEvent(FacebookEvent::INITIATE_CHECKOUT, $request, $user_data->name, $user_data->email, $user_data->contact_no, $url, [
+            'currency' => $currency,
+            'value' => $amount,
+            'ids' => array_map(fn($item) => $item['id'], json_decode($assetDetails, true))
+        ]);
+        Log::info("createOrder FacebookEvent::INITIATE_CHECKOUT end", []);
+
         return $this->successed(datas: ['data' => $datas['data'], 'type' => $gatewayType]);
     }
 
     function webhook(Request $request): array|string
     {
-
+        try {
         $method = $request->get('method');
         $transaction_id = $request->get('transaction_id');
         $isManual = $request->has('isManual') ? $request->get('isManual') : 1;
@@ -519,6 +534,10 @@ class PaymentController extends ApiController
         if ($method == null || $transaction_id == null) {
             return $this->failed(msg: "Parameters missing!");
         }
+
+            Log::info("webhook starts", [
+                'transaction_id' => $transaction_id
+            ]);
 
         $data = $this->enterTransData($request, $transaction_id, $method, $isManual);
 
@@ -528,6 +547,12 @@ class PaymentController extends ApiController
         $days = $data['days'] ?? 0;
 
         return $this->sendResponse(statusCode: $success ? 200 : 401, success: $success, msg: $msg, datas: ['is_trial' => $is_trial, 'days' => $days]);
+        } catch (\Exception $e) {
+            Log::error("webhook catch error: ", [
+                'error' => $e->getMessage()
+            ]);
+            return $this->sendResponse(statusCode: 400, success: false, msg: $e->getMessage());
+        }
     }
 
     private function getPaymentDetails(Request $request, UserData $user_data, $currency, $assetDetails, $code, $url, $seats): array
@@ -748,6 +773,13 @@ class PaymentController extends ApiController
 
     public function enterTransData(Request $request, $transaction_id, $method, $isManual, array|null $metaData = null): array
     {
+        Log::info('enterTransData request:', [
+            'transaction_id' => $transaction_id,
+            'method' => $method,
+            'isManual' => $isManual,
+            'metaData' => $metaData,
+            'request' => $request->all()
+        ]);
 
         $successRes = ['success' => true, 'msg' => 'Purchase successfully.'];
         $errorRes = ['success' => false, 'msg' => 'Payment not valid.'];
@@ -756,13 +788,16 @@ class PaymentController extends ApiController
         if (!$paymentGateway) return $this->failed(msg: "Stripe init failed");
 
         $metaData = $metaData ?? $this->getMetaData($paymentGateway, $transaction_id);
+        Log::info("webhook metaData", [
+            'metaData' => $metaData
+        ]);
 
         if (!$metaData['isSuccessed']) return ['success' => false, 'msg' => 'Payment not valid.', 'metaData' => $metaData];
 
         $user_data = $metaData['user_data'];
         $transaction_id = $metaData['transaction_id'];
 
-        if (MasterPurchaseHistory::whereTransactionId($transaction_id)->exists()) return $successRes;
+        if (PurchaseTransaction::whereTransactionId($transaction_id)->exists()) return $successRes;
 
         $promo_code_id = $metaData['promoCodeId'];
         $totalPaidAmount = $metaData['paidAmount'];
@@ -773,6 +808,10 @@ class PaymentController extends ApiController
         $details = $metaData['details'];
         $sales_person_id_for_report = $metaData['sales_person_id_for_report'];
 
+        Log::info("webhook totalNetAmount", [
+            'totalNetAmount' => $totalNetAmount,
+            'errorRes' => $errorRes
+        ]);
         if ($totalNetAmount < 0) return $errorRes;
 
         $eventData = is_array($details->eventData) ? $details->eventData : json_decode($details->eventData);
@@ -786,33 +825,69 @@ class PaymentController extends ApiController
         $fromWhere = $details->from ?? 'Web';
         $assetDetails = json_decode($details->plan_id);
 
+        $processedProducts = [];
+        $totalBaseAmount = 0;
+
         foreach ($assetDetails as $assetDetail) {
-
-            $paidAmount = $assetDetail->inrVal;
-
-            if (strtoupper($currency_code) != "INR") $paidAmount = $assetDetail->usdVal * $exchangeRate;
-
-            $netAmount = $paidAmount - ($paidAmount * $feePercentage / 100);
-
-            $this->savePurchaseData(
-                user_data: $user_data,
-                contact: $contact,
-                assetDetail: $assetDetail,
-                transaction_id: $transaction_id,
-                currency_code: $currency_code,
-                paidAmount: $paidAmount,
-                netAmount: $netAmount,
-                promo_code_id: $promo_code_id,
-                method: $method,
-                fromWhere: $fromWhere,
-                isManual: $isManual,
-                fbcId: $fbcId,
-                gclId: $gclId,
-                sales_person_id_for_report: $sales_person_id_for_report,
-            );
+            [$resCurrency, $resAmount] = $this->resolveCurrency($currency_code, $assetDetail);
+            $processedProducts[] = [
+                'asset' => $assetDetail,
+                'amount' => $resAmount
+            ];
+            $totalBaseAmount += $resAmount;
         }
 
+        $purchaseTransaction = $this->savePurchaseTransaction(
+            user_data: $user_data,
+            contact: $contact,
+            transaction_id: $transaction_id,
+            currency_code: $currency_code,
+            baseAmount: $totalPaidAmount,
+            paidAmount: $totalPaidAmount,
+            netAmount: $totalNetAmount,
+            feePercentage: $feePercentage,
+            promo_code_id: $promo_code_id,
+            method: $method,
+            fromWhere: $fromWhere,
+            isManual: $isManual,
+            fbcId: $fbcId,
+            gclId: $gclId,
+            sales_person_id_for_report: $sales_person_id_for_report
+        );
+
+        if ($purchaseTransaction) {
+            foreach ($processedProducts as $item) {
+                $proportionalPaidAmount = $totalBaseAmount > 0
+                    ? round(($item['amount'] / $totalBaseAmount) * $totalPaidAmount, 2)
+                    : 0;
+
+                $this->savePurchaseProduct(
+                    transaction: $purchaseTransaction,
+                    assetDetail: $item['asset'],
+                    amount: $item['amount'],
+                    paidAmount: $proportionalPaidAmount
+                );
+            }
+        }
+
+        // Track PURCHASE
+        Log::info("webhook FacebookEvent::PURCHASE start", []);        
+        // Track PURCHASE
+        $orderRecord = Order::whereCraftyId($details->craftyId)->first();
+        FbPixel::purchaseEvent(FacebookEvent::PURCHASE, $request, $user_data->name, $user_data->email, $user_data->contact_no, $orderRecord->url ?? null, [
+            'currency' => $details->currency,
+            'value' => $totalPaidAmount,
+            'ids' => array_map(fn($item) => $item->id, $assetDetails)
+        ], [
+            'ip' => $orderRecord->ip_address ?? null,
+            'user_agent' => $orderRecord->user_agent ?? null,
+            'fbc' => $orderRecord->fbc ?? null,
+            'fbp' => $orderRecord->fbp ?? null,
+        ]);
+        Log::info("webhook FacebookEvent::PURCHASE end", []);
+
         $successRes['taData'] = $metaData;
+        // $successRes['errorMsg'] = $errorMsg;
         return $successRes;
     }
 
@@ -869,7 +944,7 @@ class PaymentController extends ApiController
                         $metadata = $charge->metadata->toArray();
                         $craftyId = $metadata['craftyId'] ?? null;
 
-                        $query = Order::whereStripeTxnId($transaction_id);
+                        $query = Order::wherePaymentId($transaction_id);
                         if (!empty($craftyId)) $query->orWhere('crafty_id', $craftyId);
                         $orderData = $query->first();
 
@@ -911,10 +986,10 @@ class PaymentController extends ApiController
                         $feePercentage = (($paidAmount - $netAmount) / $paidAmount) * 100;
                     }
 
-                    $notes = $payment['notes'] ?? [];
+                    $notes = $transaction['notes'] ?? [];
                     $craftyId = $notes['craftyId'] ?? null;
 
-                    $query = Order::whereRazorpayPaymentId($transaction_id)->orWhere('payment_id', $transaction_id);
+                    $query = Order::wherePaymentId('payment_id', $transaction_id);
                     if (!empty($craftyId)) $query->orWhere('crafty_id', $craftyId);
                     $orderData = $query->first();
 
@@ -1000,76 +1075,97 @@ class PaymentController extends ApiController
             'method' => $paymentGateway->name,
             'sales_person_id' => $sales_person_id,
             'sales_person_id_for_report' => $sales_person_id_for_report,
-            'orderData' => $statusCheckResponse ?? null,
+            'orderData' => $orderData ?? null,
+            'uid' => $uid,
+            'transaction' => $craftyId
         ];
     }
 
-    private function savePurchaseData(
+    private function savePurchaseTransaction(
         UserData $user_data,
-                 $contact,
-                 $assetDetail,
-                 $transaction_id,
-                 $currency_code,
-                 $paidAmount,
-                 $netAmount,
-                 $promo_code_id,
-                 $method,
-                 $fromWhere,
-                 $isManual,
-                 $fbcId,
-                 $gclId,
-                 $sales_person_id_for_report): void
-    {
-
-
-        if (MasterPurchaseHistory::where('transaction_id', $transaction_id)->where('product_id', $assetDetail->id)->exists()) return;
-
-        $payment_id = HelperController::generateRandomId(prefix: 'txn_', modelSource: MasterPurchaseHistory::class);
+        $contact,
+        $transaction_id,
+        $currency_code,
+        $baseAmount,
+        $paidAmount,
+        $netAmount,
+        $feePercentage,
+        $promo_code_id,
+        $method,
+        $fromWhere,
+        $isManual,
+        $fbcId,
+        $gclId,
+        $sales_person_id_for_report,
+    ): PurchaseTransaction|null {
 
         if (!strcasecmp($currency_code, "INR")) {
             $currency_code = "INR";
-            $amount = $assetDetail->inrVal;
         } else {
             $currency_code = "USD";
-            $amount = $assetDetail->usdVal;
         }
 
-        $lockKey = "save_data_{$transaction_id}_{$assetDetail->id}";
-        $lock = Cache::lock($lockKey, 1); // Lock for 10 seconds
+        $lockKey = "save_txn_{$transaction_id}";
+        $lock = Cache::lock($lockKey, 1);
 
         try {
             if ($lock->get()) {
-                if (MasterPurchaseHistory::where('transaction_id', $transaction_id)->where('product_id', $assetDetail->id)->exists()) return;
+                $transaction = PurchaseTransaction::where('transaction_id', $transaction_id)->first();
 
-                MasterPurchaseHistory::firstOrCreate(
-                    [
-                        'transaction_id' => $transaction_id,
-                        'product_id' => $assetDetail->id,
-                    ],
-                    [
-                        'user_id' => $user_data->uid,
-                        'emp_id' => $sales_person_id_for_report,
-                        'contact_no' => $contact,
-                        'product_id' => $assetDetail->id,
-                        'product_type' => MasterPurchaseHistory::$types[$assetDetail->type],
-                        'transaction_id' => $transaction_id,
-                        'payment_id' => $payment_id,
-                        'currency_code' => $currency_code,
-                        'amount' => $amount,
-                        'paid_amount' => $paidAmount,
-                        'net_amount' => $netAmount,
-                        'promo_code_id' => $promo_code_id,
-                        'payment_method' => $method,
-                        'from_where' => $fromWhere,
-                        'fbc' => $fbcId,
-                        'gclid' => $gclId,
-                        'isManual' => $isManual,
-                        'status' => 1,
-                    ]
-                );
+                if ($transaction) {
+                    return $transaction;
+                }
+
+                $payment_id = HelperController::generateRandomId(prefix: 'txn_', modelSource: PurchaseTransaction::class, column: 'payment_id');
+
+                return PurchaseTransaction::create([
+                    'user_id' => $user_data->uid,
+                    'emp_id' => $sales_person_id_for_report,
+                    'contact_no' => $contact,
+                    'transaction_id' => $transaction_id,
+                    'payment_id' => $payment_id,
+                    'currency_code' => $currency_code,
+                    'amount' => $baseAmount,
+                    'paid_amount' => $paidAmount,
+                    'net_amount' => $netAmount,
+                    'fee_percentage' => $feePercentage,
+                    'promo_code_id' => $promo_code_id,
+                    'payment_method' => $method,
+                    'from_where' => $fromWhere,
+                    'fbc' => $fbcId,
+                    'gclid' => $gclId,
+                    'isManual' => $isManual,
+                    'payment_status' => 'paid',
+                    'status' => 1,
+                ]);
             }
 
-        } catch (Exception $e) {
+            return PurchaseTransaction::where('transaction_id', $transaction_id)->first();
+
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    private function savePurchaseProduct(PurchaseTransaction $transaction, $assetDetail, $amount = 0, $paidAmount = 0): void
+    {
+        if (PurchaseTransactionProduct::where('purchase_transaction_id', $transaction->id)->where('product_id', $assetDetail->id)->exists()) return;
+
+        try {
+            $productId = $assetDetail->id ?? null;
+            $productType = $assetDetail->type ?? null;
+
+            if (empty($productId)) return;
+
+            PurchaseTransactionProduct::firstOrCreate([
+                'purchase_transaction_id' => $transaction->id,
+                'product_id' => $productId,
+            ], [
+                'product_type' => PurchaseTransaction::$types[$productType] ?? null,
+                'amount' => $amount,
+                'paid_amount' => $paidAmount,
+            ]);
+        } catch (\Exception $e) {
 
         }
     }
@@ -1077,5 +1173,14 @@ class PaymentController extends ApiController
     public static function removeOrdersDuplicate(Order $order): void
     {
         Order::whereUserId($order->user_id)->whereIn('status', ['pending', 'failed'])->update(['status' => 'override']);
+    }
+
+    private function resolveCurrency($currency_code, $assetDetail): array
+    {
+        if (strcasecmp($currency_code, "INR") === 0) {
+            return ["INR", $assetDetail->inrVal];
+        }
+
+        return ["USD", $assetDetail->usdVal];
     }
 }

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Utils;
 
 use App\Http\Controllers\Api\RateController;
 use App\Http\Controllers\Api\Utils\ApiController;
-use App\Models\Revenue\MasterPurchaseHistory;
+use App\Models\Revenue\PurchaseTransactionProduct;
 use App\Models\Video\VideoCategory;
 use App\Models\Video\VideoTemplate;
 use App\Models\Video\VideoVirtualCategory;
@@ -325,7 +325,9 @@ class HelperController extends Controller
 
     public static function getVPurchaseTemplateCount($product_id)
     {
-        return MasterPurchaseHistory::whereProductId($product_id)->whereProductType('video')->count();
+        return PurchaseTransactionProduct::where('product_id', $product_id)
+            ->where('product_type', 'video')
+            ->count();
     }
 
     public static function stringContain($mainString, $containString)

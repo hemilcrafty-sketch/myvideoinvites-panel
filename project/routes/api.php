@@ -80,6 +80,7 @@ Route::any('otp/verify', [VerificationController::class, 'verifyOTP']);
 //start of user management
 Route::any('user/update', [UserApiController::class, 'updateUser']);	
 Route::any('user/delete', [UserApiController::class, 'deleteUser']);
+Route::post('user/purchases', [UserApiController::class, 'getPurchases']);
 //end of user management
 
 //start of contact

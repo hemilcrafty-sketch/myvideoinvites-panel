@@ -38,12 +38,15 @@ class VideoThemeController extends AppBaseController
         $groupedVideoCategories = [];
         foreach ($parentCategories as $parent) {
             $children = VideoCategory::where('parent_category_id', $parent->id)->where('status', 1)->get();
+
             $groupedVideoCategories[$parent->id] = [
                 'parent' => $parent,
                 'children' => $children,
                 'hasChildren' => $children->isNotEmpty()
             ];
         }
+
+        // dd(VideoCategory::select('parent_category_id','status')->get()->toArray());
         return view('videos.filters.themes')->with([
             'themeArray' => $filteredThemes,
             'allCategories' => $allCategories,

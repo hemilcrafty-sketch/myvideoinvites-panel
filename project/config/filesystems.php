@@ -40,7 +40,7 @@ return [
 
         'public' => [
             'driver' => 'local',
-            'root' => '/var/www/myvideoinvites/storage',
+            'root' => '/var/www/craftyartapp_com/admin_panels/templates/project/storage/app/public',
             'url' => env('APP_URL').'/storage',
             'visibility' => 'public',
             'throw' => false,

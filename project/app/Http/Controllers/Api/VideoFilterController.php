@@ -38,9 +38,9 @@ class VideoFilterController extends ApiController
                 $rootParentId = $rootParentId ? $rootParentId['id'] : $id;
                 $catId = is_string($rootParentId) ? $rootParentId : json_encode($rootParentId);
 
-                $interests = VideoInterest::select(['id', 'id_name', 'name'])->whereJsonContains('category_id', $catId)->where('status', 1)->orderBy("id", "desc")->get();
-                $sizes = VideoSize::select(["id", "size_name as name", "width_ration as p_width", "height_ration as p_height", "width as l_width", "height as l_height", "id_name"])->where('status', 1)->get();
-                $styles = VideoStyle::select(['id', 'id_name', 'name'])->where('status', 1)->orderBy("id", "desc")->get();
+                // $interests = VideoInterest::select(['id', 'id_name', 'name'])->whereJsonContains('category_id', $catId)->where('status', 1)->orderBy("id", "desc")->get();
+                // $sizes = VideoSize::select(["id", "size_name as name", "width_ration as p_width", "height_ration as p_height", "width as l_width", "height as l_height", "id_name"])->where('status', 1)->get();
+                // $styles = VideoStyle::select(['id', 'id_name', 'name'])->where('status', 1)->orderBy("id", "desc")->get();
 
                 $languages = $this->getCounts(
                     VideoLanguage::class,
@@ -62,13 +62,14 @@ class VideoFilterController extends ApiController
                     $catId
                 );
 
-                $response['colors'] = [];
-                $response['interests'] = $interests;
                 $response['languages'] = $languages;
                 $response['religions'] = $religions;
-                $response['sizes'] = $sizes;
-                $response['styles'] = $styles;
                 $response['themes'] = $themes;
+
+                // $response['colors'] = [];
+                // $response['interests'] = $interests;
+                // $response['sizes'] = $sizes;
+                // $response['styles'] = $styles;
 
                 return $this->successed(datas: ['datas' => $response], showDecoded: true);
             };
