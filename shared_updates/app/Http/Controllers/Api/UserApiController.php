@@ -137,7 +137,6 @@ class UserApiController extends ApiController
                     $transactionProducts[] = [
                         'id'             => $item->product_id,
                         'type'           => $item->product_type,
-                        'slug'           => $design?->slug,
                         'name'           => $design?->post_name ?? $design?->video_name ?? 'Product',
                         'image'          => HelperController::$mediaUrl . ($design?->post_thumb ?? $design?->video_thumb ?? ''),
                         'width'          => $design?->width ?? 0,

@@ -38,7 +38,7 @@ class PaymentConfiguration extends Model
     use HasFactory;
 
     protected $table = 'payment_configurations';
-    protected $connection = 'crafty_pricing_mysql';
+    protected $connection = 'mysql';
 
     protected $fillable = [
         'payment_scope',

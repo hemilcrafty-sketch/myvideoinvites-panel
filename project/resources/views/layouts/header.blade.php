@@ -268,7 +268,13 @@
                             <span class="micon bi bi-calendar4-week"></span><span class="mtext">Paymeny Configuration</span>
                         </a>
                     </li>
-
+                        <li>
+                            <a href="{{ route('promocode.index') }}"
+                                class="dropdown-toggle no-arrow {{ Route::currentRouteName() == 'promocode.index' ? 'selectSubMenu' : '' }}">
+                                <span class="micon"><img src="{{ asset('assets/vendors/images/menu_icon/Dashboard.svg') }}"
+                                        alt=""></span><span class="mtext">Promo Code</span>
+                            </a>
+                        </li>
                 @endif
 
             </ul>

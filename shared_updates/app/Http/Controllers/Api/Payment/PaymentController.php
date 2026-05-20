@@ -145,9 +145,8 @@ class PaymentController extends ApiController
         $amount = $request->get('amount');
         $code = $request->get('code');
         $show24Buyers = $request->get('sb', false);
-        $type = $request->get('type');
 
-        $data = $this->cpm($amount, $code, $ipData['cur'], false, $type);
+        $data = $this->cpm($amount, $code, $ipData['cur']);
         $data['curSymbol'] = $ipData['cur'] === "INR" ? '₹' : '$';
 
         if ($show24Buyers) {
@@ -508,23 +507,15 @@ class PaymentController extends ApiController
             $orderData[$datas['key']] = $datas['id'];
         }
 
-        $order = Order::create($orderData);
+        Order::create($orderData);
 
-        if ($order && $order->fbc != null) {
-            FbPixel::purchaseEvent(
-                FacebookEvent::INITIATE_CHECKOUT,
-                $request,
-                $user_data->name,
-                $user_data->email,
-                $user_data->contact_no,
-                $url,
-                [
-                    'currency' => $currency,
-                    'value' => $amount,
-                    'ids' => array_map(fn($item) => $item['id'], json_decode($assetDetails, true))
-                ]
-        );
-    }
+        // Track INITIATE_CHECKOUT
+        FbPixel::purchaseEvent(FacebookEvent::INITIATE_CHECKOUT, $request, $user_data->name, $user_data->email, $user_data->contact_no, $url, [
+            'currency' => $currency,
+            'value' => $amount,
+            'ids' => array_map(fn($item) => $item['id'], json_decode($assetDetails, true))
+        ]);
+
         return $this->successed(datas: ['data' => $datas['data'], 'type' => $gatewayType]);
     }
 
@@ -571,7 +562,7 @@ class PaymentController extends ApiController
         $amount = $amount * $seats;
 
         $promoCodeId = 0;
-        $promoCode = $this->cpm($amount, $code, $currency, true, $payMode);
+        $promoCode = $this->cpm($amount, $code, $currency, true);
         if ($promoCode['success']) {
             $amount = $promoCode['amount'];
             $promoCodeId = $promoCode['id'];
@@ -641,7 +632,7 @@ class PaymentController extends ApiController
         return $response;
     }
 
-    private function cpm($amount, $code, $currency, $provideID = false, $type = null): array
+    private function cpm($amount, $code, $currency, $provideID = false): array
     {
         if ($amount == null || $code == null) {
             return $this->failed(msg: "Parameters missing!", showDecoded: true);
@@ -653,15 +644,8 @@ class PaymentController extends ApiController
 
         $promoData = PromoCode::where('promo_code', $code)->first();
 
-        if (!$promoData || $promoData->status != 1) {
+        if (!$promoData || $promoData->status == 0) {
             return $this->failed(msg: "Code is invalid!", showDecoded: true);
-        }
-
-        $allowedUserIds = json_decode($promoData->user_id, true);
-        if (!empty($allowedUserIds) && is_array($allowedUserIds)) {
-            if (empty($this->uid) || !in_array($this->uid, $allowedUserIds)) {
-                return $this->failed(msg: "This promo code is not applicable for your account.", showDecoded: true);
-            }
         }
 
         if ($promoData->expiry_date) {
@@ -669,19 +653,6 @@ class PaymentController extends ApiController
 
             if ($expiryDate->isPast()) {
                 return $this->failed(msg: "Code is expired!", showDecoded: true);
-            }
-        }
-
-        if ($type !== null) {
-            $promoType = (int)$promoData->type;
-            if ($promoType !== 0) {
-                $isVideo = $type == 4;
-                if ($promoType === 1 && !$isVideo) {
-                    return $this->failed(msg: "This promo code is only valid for video purchases.", showDecoded: true);
-                }
-                if ($promoType === 2 && $isVideo) {
-                    return $this->failed(msg: "This promo code is only valid for subscription purchases.", showDecoded: true);
-                }
             }
         }
 
@@ -826,7 +797,6 @@ class PaymentController extends ApiController
         $assetDetails = json_decode($details->plan_id);
 
         $processedProducts = [];
-        $totalBaseAmount = 0;
 
         foreach ($assetDetails as $assetDetail) {
             [$resCurrency, $resAmount] = $this->resolveCurrency($currency_code, $assetDetail);
@@ -834,37 +804,14 @@ class PaymentController extends ApiController
                 'asset' => $assetDetail,
                 'amount' => $resAmount
             ];
-            $totalBaseAmount += $resAmount;
         }
-
-        $expectedPaidAmount = $totalBaseAmount;
-        if (!empty($promo_code_id)) {
-            $promoData = PromoCode::find($promo_code_id);
-            if ($promoData) {
-                $this->uid = $user_data->uid ?? $this->uid;
-                $payMode = $details->pay_mode ?? null;
-                $promoResult = $this->cpm($totalBaseAmount, $promoData->promo_code, $currency_code, false, $payMode);
-
-                if (!$promoResult['success']) {
-                    return ['success' => false, 'msg' => 'Promo code validation failed: ' . ($promoResult['msg'] ?? 'Invalid code')];
-                }
-
-                $expectedPaidAmount = $promoResult['amount'] ?? $totalBaseAmount;
-            }
-        }
-
-        // if (!$this->isTester($user_data->uid ?? null)) {
-            if (round((float)$expectedPaidAmount, 2) != round((float)$totalPaidAmount, 2)) {
-                return ['success' => false, 'msg' => 'Amount mismatch. Payment validation failed.'];
-            }
-        // }
 
         $purchaseTransaction = $this->savePurchaseTransaction(
             user_data: $user_data,
             contact: $contact,
             transaction_id: $transaction_id,
             currency_code: $currency_code,
-            baseAmount: $totalBaseAmount,
+            baseAmount: $totalPaidAmount,
             paidAmount: $totalPaidAmount,
             netAmount: $totalNetAmount,
             feePercentage: $feePercentage,
@@ -879,33 +826,26 @@ class PaymentController extends ApiController
 
         if ($purchaseTransaction) {
             foreach ($processedProducts as $item) {
-                $proportionalPaidAmount = $totalBaseAmount > 0
-                    ? round(($item['amount'] / $totalBaseAmount) * $totalPaidAmount, 2)
-                    : 0;
-
                 $this->savePurchaseProduct(
                     transaction: $purchaseTransaction,
                     assetDetail: $item['asset'],
-                    amount: $item['amount'],
-                    paidAmount: $proportionalPaidAmount
+                    amount: $item['amount']
                 );
             }
         }
 
         // Track PURCHASE
         $orderRecord = Order::whereCraftyId($details->craftyId)->first();
-        if ($orderRecord && ($orderRecord->fbc != null)) {
-            FbPixel::purchaseEvent(FacebookEvent::PURCHASE, $request, $user_data->name, $user_data->email, $user_data->contact_no, $orderRecord->url ?? null, [
-                'currency' => $details->currency,
-                'value' => $totalPaidAmount,
-                'ids' => array_map(fn($item) => $item->id, $assetDetails)
-            ], [
-                'ip' => $orderRecord->ip_address ?? null,
-                'user_agent' => $orderRecord->user_agent ?? null,
-                'fbc' => $orderRecord->fbc ?? null,
-                'fbp' => $orderRecord->fbp ?? null,
-            ]);
-        }
+        FbPixel::purchaseEvent(FacebookEvent::PURCHASE, $request, $user_data->name, $user_data->email, $user_data->contact_no, $orderRecord->url ?? null, [
+            'currency' => $details->currency,
+            'value' => $totalPaidAmount,
+            'ids' => array_map(fn($item) => $item->id, $assetDetails)
+        ], [
+            'ip' => $orderRecord->ip_address ?? null,
+            'user_agent' => $orderRecord->user_agent ?? null,
+            'fbc' => $orderRecord->fbc ?? null,
+            'fbp' => $orderRecord->fbp ?? null,
+        ]);
 
         $successRes['taData'] = $metaData;
         return $successRes;
@@ -1145,7 +1085,6 @@ class PaymentController extends ApiController
                     'currency_code' => $currency_code,
                     'amount' => $baseAmount,
                     'paid_amount' => $paidAmount,
-                    'desc_amount' => max(0, ($baseAmount ?? 0) - ($paidAmount ?? 0)),
                     'net_amount' => $netAmount,
                     'fee_percentage' => $feePercentage,
                     'promo_code_id' => $promo_code_id,
@@ -1166,7 +1105,7 @@ class PaymentController extends ApiController
         }
     }
 
-    private function savePurchaseProduct(PurchaseTransaction $transaction, $assetDetail, $amount = 0, $paidAmount = 0): void
+    private function savePurchaseProduct(PurchaseTransaction $transaction, $assetDetail, $amount = 0): void
     {
         if (PurchaseTransactionProduct::where('purchase_transaction_id', $transaction->id)->where('product_id', $assetDetail->id)->exists()) return;
 
@@ -1182,8 +1121,6 @@ class PaymentController extends ApiController
             ], [
                 'product_type' => PurchaseTransaction::$types[$productType] ?? null,
                 'amount' => $amount,
-                'paid_amount' => $paidAmount,
-                'desc_amount' => max(0, ($amount ?? 0) - ($paidAmount ?? 0)),
             ]);
         } catch (\Exception $e) {
 

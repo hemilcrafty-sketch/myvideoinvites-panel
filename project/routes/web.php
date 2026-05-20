@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\Video\VideoTemplateController;
 use App\Http\Controllers\Admin\Video\VideoThemeController;
 use App\Http\Controllers\Admin\Video\VideoVirtualCategoryController;
 use App\Http\Controllers\Api\Utils\ApiContentManager;
+use App\Http\Controllers\Admin\PromoCodeController;
 use App\Http\Middleware\IsAdmin;
 use App\Http\Middleware\isAdminOrSeoManger;
 use Illuminate\Http\Request;
@@ -217,6 +218,10 @@ Route::group(['middleware' => ['restrict.ip']], function () {
 		return response()->json($options);
 	})->middleware('auth');
 
+	// Promo Code Routes
+	Route::resource('promocode', PromoCodeController::class)->middleware(IsAdmin::class);
+	Route::get('get-users-by-email', [PromoCodeController::class, 'getUsersByEmail'])->name('get_users_by_email');
+	Route::get('get-users-by-ids', [PromoCodeController::class, 'getUsersByIds'])->name('get_users_by_ids');
 });
 
 Route::middleware(IsAdmin::class)->prefix('payment_configuration')->group(function () {

@@ -36,7 +36,7 @@ return [
 
         'database' => [
             'driver' => 'database',
-            'table' => 'laravel_panel_jobs',
+            'table' => 'laravel_jobs',
             'queue' => 'default',
             'retry_after' => 90,
         ],
@@ -83,7 +83,7 @@ return [
     'failed' => [
         'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
         'database' => env('DB_CONNECTION', 'mysql'),
-        'table' => 'laravel_panel_failed_jobs',
+        'table' => 'laravel_failed_job',
     ],
 
 ];
